@@ -1,36 +1,44 @@
 ---
-import Layout from '../layouts/Layout.astro';
-import Chart from '../components/Chart.astro';
-import { fetchRecords } from '../api/airtable';
+import Layout from "../layouts/Layout.astro";
+import Chart from "../components/Chart.astro";
+import { fetchRecords } from "../api/airtable";
+
+// Get current build time in America/Chicago timezone
+const buildTime = new Date().toLocaleString("en-US", {
+  timeZone: "America/Chicago",
+  dateStyle: "full",
+  timeStyle: "long",
+});
 
 // Fetch data from Airtable Shots table
 let records = [];
-let errorMessage = '';
+let errorMessage = "";
 let debugInfo = {
   recordCount: 0,
   hasStartTime: false,
   startTimeFieldName: null,
   availableFields: [],
-  dateExample: null
+  dateExample: null,
 };
 
 try {
-  records = await fetchRecords('Shots');
-  
+  records = await fetchRecords("Shots");
+
   // Collect debug info
   debugInfo.recordCount = records.length;
   if (records.length > 0) {
     debugInfo.availableFields = Object.keys(records[0]);
-    
+
     // Check for date/time fields
     const dateFields = Object.entries(records[0]).filter(([key, value]) => {
-      return typeof value === 'string' && (
-        key.toLowerCase().includes('date') || 
-        key.toLowerCase().includes('time') ||
-        (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}/))
+      return (
+        typeof value === "string" &&
+        (key.toLowerCase().includes("date") ||
+          key.toLowerCase().includes("time") ||
+          (typeof value === "string" && value.match(/^\d{4}-\d{2}-\d{2}/)))
       );
     });
-    
+
     if (dateFields.length > 0) {
       debugInfo.startTimeFieldName = dateFields[0][0];
       debugInfo.dateExample = dateFields[0][1];
@@ -39,34 +47,37 @@ try {
   }
 } catch (e) {
   errorMessage = e.message;
-  console.error('Error in page component:', e);
+  console.error("Error in page component:", e);
 }
 
 // Process data for the monthly espresso shots chart
 function processMonthlyData(records) {
   // Handle empty records
   if (!records || records.length === 0) {
-    console.log('No records to process');
+    console.log("No records to process");
     return {
       labels: [],
-      data: []
+      data: [],
     };
   }
 
   // Find the date field if "Start time" doesn't exist
-  let dateField = 'Start time';
+  let dateField = "Start time";
   if (records[0] && !records[0][dateField]) {
     // Look for alternative date fields
-    const possibleFields = Object.keys(records[0]).filter(field => 
-      field.toLowerCase().includes('date') || 
-      field.toLowerCase().includes('time')
+    const possibleFields = Object.keys(records[0]).filter(
+      (field) =>
+        field.toLowerCase().includes("date") ||
+        field.toLowerCase().includes("time"),
     );
-    
+
     if (possibleFields.length > 0) {
       dateField = possibleFields[0];
-      console.log(`Using "${dateField}" as the date field instead of "Start time"`);
+      console.log(
+        `Using "${dateField}" as the date field instead of "Start time"`,
+      );
     } else {
-      console.log('No date/time field found in records');
+      console.log("No date/time field found in records");
       return { labels: [], data: [] };
     }
   }
@@ -74,48 +85,53 @@ function processMonthlyData(records) {
   // Create a map to store counts by month
   const monthlyCounts = {};
   let validDateCount = 0;
-  
-  records.forEach(record => {
+
+  records.forEach((record) => {
     // Skip records without a date field
     if (!record[dateField]) return;
-    
+
     // Convert to Date object
     try {
       const date = new Date(record[dateField]);
-      
+
       if (isNaN(date.getTime())) {
         console.log(`Invalid date: ${record[dateField]}`);
         return;
       }
-      
+
       // Skip December 2023
       if (date.getMonth() === 11 && date.getFullYear() === 2023) {
         return;
       }
-      
+
       validDateCount++;
-      
+
       // Create a month key in format "MMM YYYY" (e.g., "Jan 2023")
-      const monthYear = date.toLocaleString('en-US', { month: 'short', year: 'numeric' });
-      
+      const monthYear = date.toLocaleString("en-US", {
+        month: "short",
+        year: "numeric",
+      });
+
       // Increment the count for this month
       monthlyCounts[monthYear] = (monthlyCounts[monthYear] || 0) + 1;
     } catch (e) {
       console.error(`Error processing date "${record[dateField]}":`, e);
     }
   });
-  
-  console.log(`Processed ${validDateCount} valid dates out of ${records.length} records`);
-  console.log('Monthly counts:', monthlyCounts);
-  
+
+  console.log(
+    `Processed ${validDateCount} valid dates out of ${records.length} records`,
+  );
+  console.log("Monthly counts:", monthlyCounts);
+
   // Sort the months chronologically
   const sortedMonths = Object.keys(monthlyCounts).sort((a, b) => {
     return new Date(a) - new Date(b);
   });
-  
+
   return {
     labels: sortedMonths,
-    data: sortedMonths.map(month => monthlyCounts[month])
+    data: sortedMonths.map((month) => monthlyCounts[month]),
   };
 }
 
@@ -123,27 +139,28 @@ function processMonthlyData(records) {
 function processDailyData(records) {
   // Handle empty records
   if (!records || records.length === 0) {
-    console.log('No records to process for daily chart');
+    console.log("No records to process for daily chart");
     return {
       labels: [],
-      data: []
+      data: [],
     };
   }
 
   // Find the date field if "Start time" doesn't exist
-  let dateField = 'Start time';
+  let dateField = "Start time";
   if (records[0] && !records[0][dateField]) {
     // Look for alternative date fields
-    const possibleFields = Object.keys(records[0]).filter(field => 
-      field.toLowerCase().includes('date') || 
-      field.toLowerCase().includes('time')
+    const possibleFields = Object.keys(records[0]).filter(
+      (field) =>
+        field.toLowerCase().includes("date") ||
+        field.toLowerCase().includes("time"),
     );
-    
+
     if (possibleFields.length > 0) {
       dateField = possibleFields[0];
       console.log(`Using "${dateField}" as the date field for daily chart`);
     } else {
-      console.log('No date/time field found in records for daily chart');
+      console.log("No date/time field found in records for daily chart");
       return { labels: [], data: [] };
     }
   }
@@ -152,63 +169,66 @@ function processDailyData(records) {
   const sixtyDaysAgo = new Date();
   sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
   sixtyDaysAgo.setHours(0, 0, 0, 0);
-  
+
   // Create a map to store counts by day
   const dailyCounts = {};
   let validDailyDateCount = 0;
-  
+
   // Generate all dates in the past 60 days for the x-axis (even days with 0 shots)
   const allDates = [];
   for (let i = 0; i < 60; i++) {
     const date = new Date();
     date.setDate(date.getDate() - i);
     date.setHours(0, 0, 0, 0);
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = date.toISOString().split("T")[0];
     allDates.unshift(dateStr); // Add to front to maintain chronological order
     dailyCounts[dateStr] = 0; // Initialize with 0
   }
-  
+
   // Count shots for each day
-  records.forEach(record => {
+  records.forEach((record) => {
     // Skip records without a date field
     if (!record[dateField]) return;
-    
+
     // Convert to Date object
     try {
       const date = new Date(record[dateField]);
-      
+
       if (isNaN(date.getTime())) {
         return;
       }
-      
+
       // Skip dates older than 60 days
       if (date < sixtyDaysAgo) {
         return;
       }
-      
+
       validDailyDateCount++;
-      
+
       // Format date as YYYY-MM-DD
-      const dateStr = date.toISOString().split('T')[0];
-      
+      const dateStr = date.toISOString().split("T")[0];
+
       // Increment the count for this day
       dailyCounts[dateStr] = (dailyCounts[dateStr] || 0) + 1;
     } catch (e) {
-      console.error(`Error processing date "${record[dateField]}" for daily chart:`, e);
+      console.error(
+        `Error processing date "${record[dateField]}" for daily chart:`,
+        e,
+      );
     }
   });
-  
+
   console.log(`Processed ${validDailyDateCount} valid dates for daily chart`);
-  
+
   // Format dates for display (MM/DD)
-  const formattedDates = allDates.map(date => {
-    const [year, month, day] = date.split('-');
+  const formattedDates = allDates.map((date) => {
+    const [year, month, day] = date.split("-");
     return `${month}/${day}`;
   });
-  
+
   return {
     labels: formattedDates,
-    data: allDates.map(date => dailyCounts[date])
+    data: allDates.map((date) => dailyCounts[date]),
   };
 }
 
@@ -217,74 +237,86 @@ const { labels: dailyLabels, data: dailyData } = processDailyData(records);
 const hasData = labels.length > 0;
 const hasDailyData = dailyLabels.length > 0;
 
-console.log('Chart data:', { labels, data, hasData });
-console.log('Daily chart data:', { dailyLabels, dailyData, hasDailyData });
+console.log("Chart data:", { labels, data, hasData });
+console.log("Daily chart data:", { dailyLabels, dailyData, hasDailyData });
 ---
 
 <Layout title="Espresso Shot Analytics">
   <main>
     <h1>Espresso Shot Analytics</h1>
-    
-    {errorMessage && (
-      <div class="error-message">
-        <h2>Configuration Error</h2>
-        <p>{errorMessage}</p>
-        <p>Please check your .env file and ensure your Airtable credentials are correct.</p>
-      </div>
-    )}
-    
-    <div class="chart-section">
-      {hasData ? (
-        <Chart 
-          id="monthly-shots-chart"
-          title="Monthly Espresso Shots (Excluding Dec 2023)"
-          data={data}
-          labels={labels}
-          chartType="bar"
-        />
-      ) : (
-        <div class="no-data">
-          <h2>No Monthly Shot Data Available</h2>
+    <p class="build-time">Last updated: {buildTime}</p>
+
+    {
+      errorMessage && (
+        <div class="error-message">
+          <h2>Configuration Error</h2>
+          <p>{errorMessage}</p>
           <p>
-            {errorMessage 
-              ? "Please fix the configuration error above." 
-              : "Make sure your Airtable credentials are correct and your table contains records with a date/time field."}
+            Please check your .env file and ensure your Airtable credentials are
+            correct.
           </p>
         </div>
-      )}
-    </div>
-    
+      )
+    }
+
     <div class="chart-section">
-      {hasDailyData ? (
-        <Chart 
-          id="daily-shots-chart"
-          title="Daily Espresso Shots (Last 60 Days)"
-          data={dailyData}
-          labels={dailyLabels}
-          chartType="line"
-        />
-      ) : (
-        <div class="no-data">
-          <h2>No Daily Shot Data Available</h2>
-          <p>No recent shots found within the last 60 days.</p>
-        </div>
-      )}
+      {
+        hasData ? (
+          <Chart
+            id="monthly-shots-chart"
+            title="Monthly Espresso Shots"
+            data={data}
+            labels={labels}
+            chartType="bar"
+          />
+        ) : (
+          <div class="no-data">
+            <h2>No Monthly Shot Data Available</h2>
+            <p>
+              {errorMessage
+                ? "Please fix the configuration error above."
+                : "Make sure your Airtable credentials are correct and your table contains records with a date/time field."}
+            </p>
+          </div>
+        )
+      }
     </div>
-    
-    {debugInfo.recordCount > 0 && !hasData && (
-      <div class="debug-info">
-        <h3>Debug Information</h3>
-        <p>Records found: {debugInfo.recordCount}</p>
-        <p>Available fields: {debugInfo.availableFields.join(', ')}</p>
-        <p>Date field found: {debugInfo.hasStartTime ? 'Yes' : 'No'}</p>
-        {debugInfo.startTimeFieldName && (
-          <p>Using field: {debugInfo.startTimeFieldName}</p>
-        )}
-        {debugInfo.dateExample && (
-          <p>Example date value: {debugInfo.dateExample}</p>
-        )}
-      </div>
-    )}
+
+    <div class="chart-section">
+      {
+        hasDailyData ? (
+          <Chart
+            id="daily-shots-chart"
+            title="Daily Espresso Shots (Last 60 Days)"
+            data={dailyData}
+            labels={dailyLabels}
+            chartType="line"
+          />
+        ) : (
+          <div class="no-data">
+            <h2>No Daily Shot Data Available</h2>
+            <p>No recent shots found within the last 60 days.</p>
+          </div>
+        )
+      }
+    </div>
+
+    {
+      debugInfo.recordCount > 0 && !hasData && (
+        <div class="debug-info">
+          <h3>Debug Information</h3>
+          <p>Records found: {debugInfo.recordCount}</p>
+          <p>Available fields: {debugInfo.availableFields.join(", ")}</p>
+          <p>Date field found: {debugInfo.hasStartTime ? "Yes" : "No"}</p>
+          {debugInfo.startTimeFieldName && (
+            <p>Using field: {debugInfo.startTimeFieldName}</p>
+          )}
+          {debugInfo.dateExample && (
+            <p>Example date value: {debugInfo.dateExample}</p>
+          )}
+        </div>
+      )
+    }
   </main>
 </Layout>
 
@@ -297,14 +329,21 @@ console.log('Daily chart data:', { dailyLabels, dailyData, hasDailyData });
     background-color: var(--background);
     color: var(--text-primary);
   }
-  
+
   h1 {
     text-align: center;
-    margin-bottom: 2.5rem;
+    margin-bottom: 0.5rem;
     font-family: var(--font-primary);
     color: var(--text-primary);
   }
   
+  .build-time {
+    text-align: center;
+    margin-bottom: 2rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+  }
+
   .chart-section {
     margin-bottom: 4rem; /* Increased margin between charts */
     padding: 1.5rem 1.5rem 2.5rem 1.5rem; /* More padding at the bottom */
@@ -313,7 +352,7 @@ console.log('Daily chart data:', { dailyLabels, dailyData, hasDailyData });
     transition: background-color 0.3s ease;
     box-sizing: border-box; /* Make sure padding is included in height calculation */
   }
-  
+
   .error-message {
     background-color: var(--error-color);
     color: var(--background);
@@ -323,11 +362,11 @@ console.log('Daily chart data:', { dailyLabels, dailyData, hasDailyData });
     border-radius: 4px;
     font-family: var(--font-primary);
   }
-  
+
   .error-message h2 {
     color: var(--background);
   }
-  
+
   .no-data {
     padding: 2rem;
     text-align: center;
@@ -336,11 +375,11 @@ console.log('Daily chart data:', { dailyLabels, dailyData, hasDailyData });
     border: 1px dashed var(--border-color);
     color: var(--text-secondary);
   }
-  
+
   .no-data h2 {
     color: var(--text-primary);
   }
-  
+
   .debug-info {
     text-align: left;
     padding: 1rem;
@@ -351,11 +390,11 @@ console.log('Daily chart data:', { dailyLabels, dailyData, hasDailyData });
     color: var(--text-secondary);
     background-color: var(--background-secondary);
   }
-  
+
   .debug-info h3 {
     color: var(--text-primary);
   }
-  
+
   /* Added specific width to maintain proper layout */
   @media (min-width: 800px) {
     .chart-section {
