@@ -65,6 +65,7 @@ Before deploying, make sure to update these files:
 2. After pushing to the `main` branch, GitHub Actions will automatically:
    - Build the project with your environment variables
    - Deploy to GitHub Pages
+   - Additionally, the site is automatically rebuilt daily at 2:00 AM UTC to refresh Airtable data
 
 3. Enable GitHub Pages in your repository settings:
    - Go to Settings > Pages

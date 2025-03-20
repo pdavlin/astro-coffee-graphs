@@ -3,9 +3,12 @@ name: Deploy to GitHub Pages
 on:
   # Trigger the workflow every time you push to the `main` branch
   push:
-    branches: [ main ]
+    branches: [main]
   # Allows you to run this workflow manually from the Actions tab on GitHub
   workflow_dispatch:
+  # Run a scheduled rebuild every day at 2:00 AM UTC
+  schedule:
+    - cron: "0 7 * * *"
 
 # Allow this job to clone the repo and create a page deployment
 permissions:
@@ -29,7 +32,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: "npm"
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v4
