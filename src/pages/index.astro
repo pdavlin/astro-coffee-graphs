@@ -13,7 +13,13 @@ const hour = chicagoTime.getHours();
 const minute = String(chicagoTime.getMinutes()).padStart(2, '0');
 const ampm = hour >= 12 ? 'PM' : 'AM';
 const hour12 = hour % 12 || 12;
-const timeZone = /\((.*)\)/.exec(chicagoTime.toString())[1];
+
+// Determine if it's CDT or CST based on date
+const jan = new Date(chicagoTime.getFullYear(), 0, 1).getTimezoneOffset();
+const jul = new Date(chicagoTime.getFullYear(), 6, 1).getTimezoneOffset();
+const isDST = Math.max(jan, jul) !== chicagoTime.getTimezoneOffset();
+const timeZone = isDST ? 'CDT' : 'CST';
+
 const buildTime = `${year}-${month}-${day} ${hour12}:${minute} ${ampm} ${timeZone}`;
 
 // Fetch data from Airtable Shots table
