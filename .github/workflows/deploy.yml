@@ -13,6 +13,12 @@ permissions:
   pages: write
   id-token: write
 
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,6 +30,9 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
+      - name: Setup Pages
+        id: pages
+        uses: actions/configure-pages@v4
       - name: Install dependencies
         run: npm ci
       - name: Set environment variables
@@ -32,8 +41,8 @@ jobs:
           echo "AIRTABLE_BASE_ID=${{ secrets.AIRTABLE_BASE_ID }}" >> $GITHUB_ENV
       - name: Build Astro
         run: npm run build
-      - name: Upload Pages Artifact
-        uses: actions/upload-pages-artifact@v2
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
           path: "./dist"
 
@@ -47,4 +56,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v2
+        uses: actions/deploy-pages@v4
