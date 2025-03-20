@@ -4,11 +4,17 @@ import Chart from "../components/Chart.astro";
 import { fetchRecords } from "../api/airtable";
 
 // Get current build time in America/Chicago timezone
-const buildTime = new Date().toLocaleString("en-US", {
-  timeZone: "America/Chicago",
-  dateStyle: "full",
-  timeStyle: "long",
-});
+const now = new Date();
+const chicagoTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Chicago" }));
+const year = chicagoTime.getFullYear();
+const month = String(chicagoTime.getMonth() + 1).padStart(2, '0');
+const day = String(chicagoTime.getDate()).padStart(2, '0');
+const hour = chicagoTime.getHours();
+const minute = String(chicagoTime.getMinutes()).padStart(2, '0');
+const ampm = hour >= 12 ? 'PM' : 'AM';
+const hour12 = hour % 12 || 12;
+const timeZone = /\((.*)\)/.exec(chicagoTime.toString())[1];
+const buildTime = `${year}-${month}-${day} ${hour12}:${minute} ${ampm} ${timeZone}`;
 
 // Fetch data from Airtable Shots table
 let records = [];
