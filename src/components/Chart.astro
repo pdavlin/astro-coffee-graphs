@@ -1,0 +1,248 @@
+---
+// Chart.astro
+export interface Props {
+  id: string;
+  title: string;
+  data: any[];
+  labels: string[];
+  chartType?: 'line' | 'bar' | 'pie';
+}
+
+const { id, title, data, labels, chartType = 'bar' } = Astro.props;
+---
+
+<div class="chart-container">
+  <h2>{title}</h2>
+  <canvas id={id}></canvas>
+</div>
+
+<!-- Load Chart.js from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script define:vars={{ id, title, data, labels, chartType }}>
+  // Function to get CSS variable value
+  function getCssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+  
+  // Convert HSL to RGBA
+  function hslToRgba(hslStr, alpha = 1) {
+    // Parse HSL values
+    const hslRegex = /hsl\(\s*(\d+)\s*,\s*(\d+)%\s*,\s*(\d+)%\s*\)/;
+    const match = hslStr.match(hslRegex);
+    
+    if (!match) return hslStr; // Return original if not HSL format
+    
+    const h = parseInt(match[1]) / 360;
+    const s = parseInt(match[2]) / 100;
+    const l = parseInt(match[3]) / 100;
+    
+    let r, g, b;
+    
+    if (s === 0) {
+      r = g = b = l;
+    } else {
+      const hue2rgb = (p, q, t) => {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1/6) return p + (q - p) * 6 * t;
+        if (t < 1/2) return q;
+        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+        return p;
+      };
+      
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      
+      r = hue2rgb(p, q, h + 1/3);
+      g = hue2rgb(p, q, h);
+      b = hue2rgb(p, q, h - 1/3);
+    }
+    
+    return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${alpha})`;
+  }
+  
+  // Wait for everything to load
+  document.addEventListener('DOMContentLoaded', () => {
+    const ctx = document.getElementById(id);
+    
+    if (!ctx) {
+      console.error(`Canvas element with id ${id} not found!`);
+      return;
+    }
+    
+    console.log(`Initializing chart ${id} with ${labels.length} labels and ${data.length} data points`);
+
+    // Set up theme-aware colors
+    const setupChart = () => {
+      try {
+        // Get theme colors - using direct HSL values for better compatibility
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const fontFamily = "'CustomFont', 'Courier New', Courier, monospace";
+        
+        // Choose colors based on theme
+        const primaryColorHsl = isDark ? 'hsl(210, 40%, 52%)' : 'hsl(240, 45%, 62%)';
+        const textColorHsl = isDark ? 'hsl(0, 25%, 94%)' : 'hsl(0, 7%, 10%)';
+        const backgroundHsl = isDark ? 'hsl(0, 6%, 15%)' : 'hsl(0, 15%, 89%)';
+        
+        // Convert to RGBA for transparency
+        const primaryColor = primaryColorHsl;
+        const primaryColorAlpha = hslToRgba(primaryColorHsl, 0.5);
+        const textColor = textColorHsl;
+        const backgroundColor = hslToRgba(backgroundHsl, 0.7);
+        
+        console.log(`Chart colors: primary=${primaryColor}, text=${textColor}`);
+        
+        // Create new chart
+        if (window[`chart_${id}`]) {
+          window[`chart_${id}`].destroy();
+        }
+        
+        window[`chart_${id}`] = new Chart(ctx, {
+          type: chartType,
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Total Shots',
+              data: data,
+              backgroundColor: primaryColorAlpha,
+              borderColor: primaryColor,
+              borderWidth: 1,
+              tension: 0.3 // Makes line charts smoother
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: {
+              padding: {
+                bottom: 25 // Add padding at the bottom for labels
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'Number of Shots',
+                  color: textColor,
+                  font: {
+                    family: fontFamily
+                  }
+                },
+                ticks: {
+                  precision: 0,
+                  color: textColor,
+                  font: {
+                    family: fontFamily
+                  }
+                },
+                grid: {
+                  display: false
+                }
+              },
+              x: {
+                title: {
+                  display: true,
+                  text: chartType === 'line' ? 'Date' : 'Month',
+                  color: textColor,
+                  font: {
+                    family: fontFamily
+                  },
+                  padding: {
+                    top: 10 // Space above the title
+                  }
+                },
+                ticks: {
+                  color: textColor,
+                  font: {
+                    family: fontFamily
+                  }
+                },
+                grid: {
+                  display: false
+                }
+              }
+            },
+            plugins: {
+              legend: {
+                labels: {
+                  color: textColor,
+                  font: {
+                    family: fontFamily
+                  },
+                  padding: 10
+                },
+                position: 'top',
+              },
+              tooltip: {
+                backgroundColor: backgroundColor,
+                titleColor: textColor,
+                bodyColor: textColor,
+                borderWidth: 1,
+                titleFont: {
+                  family: fontFamily
+                },
+                bodyFont: {
+                  family: fontFamily
+                },
+                callbacks: {
+                  title: function(tooltipItems) {
+                    return tooltipItems[0].label;
+                  },
+                  label: function(context) {
+                    return `${context.parsed.y} shots`;
+                  }
+                }
+              }
+            }
+          }
+        });
+        
+        console.log('Chart successfully initialized');
+      } catch (error) {
+        console.error('Error creating chart:', error);
+        console.error(error.stack);
+      }
+    };
+    
+    // Initialize chart
+    setupChart();
+    
+    // Re-render chart on theme change
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'data-theme') {
+          console.log('Theme changed, updating chart');
+          setupChart();
+        }
+      });
+    });
+    
+    // Start observing theme changes
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
+    });
+  });
+</script>
+
+<style>
+  .chart-container {
+    width: 100%;
+    max-width: 800px;
+    height: 475px; /* Increased height for label space */
+    margin: 0 auto;
+    padding: 1rem 0;
+    background-color: transparent;
+    font-family: var(--font-primary);
+    color: var(--text-primary);
+  }
+
+  h2 {
+    text-align: center;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+    font-family: var(--font-primary);
+  }
+</style>

@@ -1,16 +1,14 @@
-# Astro Starter Kit: Basics
+# Astro Coffee Graphs
 
-```sh
-npm create astro@latest -- --template basics
-```
+A visualization dashboard for espresso shots data stored in Airtable, built with Astro and Chart.js.
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/withastro/astro/tree/latest/examples/basics)
-[![Open with CodeSandbox](https://assets.codesandbox.io/github/button-edit-lime.svg)](https://codesandbox.io/p/sandbox/github/withastro/astro/tree/latest/examples/basics)
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/withastro/astro?devcontainer_path=.devcontainer/basics/devcontainer.json)
+## Features
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
-
-![just-the-basics](https://github.com/withastro/astro/assets/2244813/a0a5533c-a856-4198-8470-2d67b1d7c554)
+- Display monthly and daily espresso shot analytics
+- Responsive charts using Chart.js
+- Dark/light mode based on system preferences
+- Custom monospace font styling
+- Secure Airtable integration
 
 ## 🚀 Project Structure
 
@@ -43,6 +41,33 @@ All commands are run from the root of the project, from a terminal:
 | `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
 | `npm run astro -- --help` | Get help using the Astro CLI                     |
 
-## 👀 Want to learn more?
+## 🚀 Deployment
 
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+This project is set up to deploy to GitHub Pages using GitHub Actions.
+
+### Prerequisites
+
+1. Push your code to a GitHub repository
+2. Set up repository secrets for your Airtable credentials:
+   - Go to your repository Settings > Secrets and variables > Actions
+   - Add the following repository secrets:
+     - `AIRTABLE_API_KEY`: Your Airtable API key
+     - `AIRTABLE_BASE_ID`: Your Airtable base ID
+
+### Configuration
+
+Before deploying, make sure to update these files:
+
+1. In `astro.config.mjs`, replace:
+   - `USERNAME` with your GitHub username
+   - `astro-coffee-graphs` with your repository name (if different)
+
+2. After pushing to the `main` branch, GitHub Actions will automatically:
+   - Build the project with your environment variables
+   - Deploy to GitHub Pages
+
+3. Enable GitHub Pages in your repository settings:
+   - Go to Settings > Pages
+   - Set the "Source" to "GitHub Actions"
+
+Your site will be available at `https://USERNAME.github.io/astro-coffee-graphs/`

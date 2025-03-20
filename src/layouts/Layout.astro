@@ -1,22 +1,141 @@
+---
+interface Props {
+	title: string;
+}
+
+const { title } = Astro.props;
+---
+
 <!doctype html>
 <html lang="en">
 	<head>
 		<meta charset="UTF-8" />
+		<meta name="description" content="Espresso Shot Analytics" />
 		<meta name="viewport" content="width=device-width" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<meta name="generator" content={Astro.generator} />
-		<title>Astro Basics</title>
+		<title>{title}</title>
 	</head>
 	<body>
 		<slot />
 	</body>
 </html>
 
-<style>
-	html,
+<script>
+	document.addEventListener('DOMContentLoaded', () => {
+		// Check for OS theme preference
+		const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+		
+		// Apply theme based on OS preference only
+		document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+		
+		// Listen for changes in OS theme preference
+		window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+			document.documentElement.setAttribute('data-theme', event.matches ? 'dark' : 'light');
+		});
+	});
+</script>
+
+<style is:global>
+	/* Custom Font Declaration */
+	@font-face {
+		font-family: 'CustomFont';
+		src: url('/fonts/BerkeleyMono-Regular.otf') format('opentype');
+		font-weight: normal;
+		font-style: normal;
+		font-display: swap;
+	}
+
+	/* Base Espresso Color Theme */
+	:root {
+		/* Light mode (default) */
+		--base00: hsl(0, 7%, 10%);  /* #1b1818 - Background (dark) */
+		--base01: hsl(0, 6%, 15%);  /* #292424 - Background highlights */
+		--base02: hsl(0, 5%, 33%);  /* #585050 - Comments, inactive items */
+		--base03: hsl(0, 4%, 38%);  /* #655d5d - Dark borders, subtle text */
+		--base04: hsl(0, 3%, 48%);  /* #7e7777 - Medium borders, secondary text */
+		--base05: hsl(0, 2%, 53%);  /* #8a8585 - Default text */
+		--base06: hsl(0, 15%, 89%); /* #e7dfdf - Light borders, light text */
+		--base07: hsl(0, 25%, 94%); /* #f4ecec - Background (light) */
+		--base08: hsl(0, 55%, 54%);  /* #ca4949 - Red / Error */
+		--base09: hsl(15, 50%, 47%); /* #b45a3c - Orange / Number */
+		--base0a: hsl(30, 46%, 43%); /* #a06e3b - Yellow / Warning */
+		--base0b: hsl(180, 30%, 42%); /* #4b8b8b - Green / Success */
+		--base0c: hsl(210, 40%, 52%); /* #5485b6 - Cyan / Process */
+		--base0d: hsl(240, 45%, 62%); /* #7272ca - Blue / Primary */
+		--base0e: hsl(260, 45%, 58%); /* #8464c4 - Purple / Secondary */
+		--base0f: hsl(330, 45%, 53%); /* #bd5187 - Magenta / Special */
+		
+		/* Typography */
+		--font-primary: 'CustomFont', 'Courier New', Courier, monospace;
+		
+		/* Light theme variables */
+		--background: var(--base07);
+		--background-secondary: var(--base06);
+		--foreground: var(--base01);
+		--text-primary: var(--base00);
+		--text-secondary: var(--base02);
+		--border-color: var(--base04);
+		--accent-color: var(--base0d);
+		--error-color: var(--base08);
+		--success-color: var(--base0b);
+		--chart-background: var(--base07);
+		--chart-grid: var(--base06);
+		--chart-primary: hsl(240, 45%, 62%); /* Explicit value for Chart.js */
+		--chart-secondary: hsl(260, 45%, 58%); /* Explicit value for Chart.js */
+	}
+	
+	/* Dark theme */
+	[data-theme="dark"] {
+		/* Dark theme variables */
+		--background: var(--base00);
+		--background-secondary: var(--base01);
+		--foreground: var(--base06);
+		--text-primary: var(--base07);
+		--text-secondary: var(--base05);
+		--border-color: var(--base03);
+		--accent-color: var(--base0c);
+		--error-color: var(--base08);
+		--success-color: var(--base0b);
+		--chart-background: var(--base01);
+		--chart-grid: var(--base02);
+		--chart-primary: hsl(210, 40%, 52%); /* Explicit value for Chart.js */
+		--chart-secondary: hsl(260, 45%, 58%); /* Explicit value for Chart.js */
+	}
+	
+	html {
+		font-family: var(--font-primary);
+		background-color: var(--background);
+		color: var(--text-primary);
+		transition: background-color 0.3s ease, color 0.3s ease;
+	}
+	
 	body {
 		margin: 0;
+		padding: 0;
+		font-family: var(--font-primary);
+		background-color: var(--background);
+		color: var(--text-primary);
 		width: 100%;
 		height: 100%;
+		transition: background-color 0.3s ease, color 0.3s ease;
+	}
+	
+	code {
+		font-family: var(--font-primary);
+	}
+	
+	button, input, select, textarea {
+		font-family: var(--font-primary);
+	}
+	
+	h1, h2, h3, h4, h5, h6 {
+		font-family: var(--font-primary);
+		font-weight: bold;
+		color: var(--text-primary);
+	}
+	
+	a {
+		color: var(--accent-color);
 	}
 </style>
