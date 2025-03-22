@@ -3,12 +3,13 @@
 export interface Props {
   id: string;
   title: string;
-  data: any[];
+  data: any[] | { regular: number[], decaf: number[] };
   labels: string[];
   chartType?: 'line' | 'bar' | 'pie';
 }
 
 const { id, title, data, labels, chartType = 'bar' } = Astro.props;
+const isStackedBar = id === 'daily-shots-chart';
 ---
 
 <div class="chart-container">
@@ -19,7 +20,7 @@ const { id, title, data, labels, chartType = 'bar' } = Astro.props;
 <!-- Load Chart.js from CDN -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<script define:vars={{ id, title, data, labels, chartType }}>
+<script define:vars={{ id, title, data, labels, chartType, isStackedBar }}>
   // Function to get CSS variable value
   function getCssVar(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -71,7 +72,19 @@ const { id, title, data, labels, chartType = 'bar' } = Astro.props;
       return;
     }
     
-    console.log(`Initializing chart ${id} with ${labels.length} labels and ${data.length} data points`);
+    if (isStackedBar) {
+      console.log(`Initializing stacked bar chart ${id} with ${labels.length} labels`);
+      console.log('Stacked Bar Data:', {
+        hasRegularData: data && data.regular,
+        hasDecafData: data && data.decaf,
+        regularLength: data && data.regular ? data.regular.length : 0,
+        decafLength: data && data.decaf ? data.decaf.length : 0,
+        dataType: typeof data,
+        isArray: Array.isArray(data)
+      });
+    } else {
+      console.log(`Initializing chart ${id} with ${labels.length} labels and ${data.length} data points`);
+    }
 
     // Set up theme-aware colors
     const setupChart = () => {
@@ -82,12 +95,15 @@ const { id, title, data, labels, chartType = 'bar' } = Astro.props;
         
         // Choose colors based on theme
         const primaryColorHsl = isDark ? 'hsl(210, 40%, 52%)' : 'hsl(240, 45%, 62%)';
+        const secondaryColorHsl = isDark ? 'hsl(30, 50%, 60%)' : 'hsl(30, 70%, 60%)';
         const textColorHsl = isDark ? 'hsl(0, 25%, 94%)' : 'hsl(0, 7%, 10%)';
         const backgroundHsl = isDark ? 'hsl(0, 6%, 15%)' : 'hsl(0, 15%, 89%)';
         
         // Convert to RGBA for transparency
         const primaryColor = primaryColorHsl;
-        const primaryColorAlpha = hslToRgba(primaryColorHsl, 0.5);
+        const primaryColorAlpha = hslToRgba(primaryColorHsl, 0.7);
+        const secondaryColor = secondaryColorHsl;
+        const secondaryColorAlpha = hslToRgba(secondaryColorHsl, 0.7);
         const textColor = textColorHsl;
         const backgroundColor = hslToRgba(backgroundHsl, 0.7);
         
@@ -98,18 +114,64 @@ const { id, title, data, labels, chartType = 'bar' } = Astro.props;
           window[`chart_${id}`].destroy();
         }
         
+        // Set up datasets based on chart type
+        let datasets;
+        if (isStackedBar && data && typeof data === 'object' && !Array.isArray(data)) {
+          // Check if we have regular and decaf data available
+          const hasRegularData = data.regular && Array.isArray(data.regular);
+          const hasDecafData = data.decaf && Array.isArray(data.decaf);
+          
+          // Prepare datasets based on available data
+          datasets = [];
+          
+          if (hasRegularData) {
+            datasets.push({
+              label: 'Regular Coffee',
+              data: data.regular,
+              backgroundColor: primaryColorAlpha,
+              borderColor: primaryColor,
+              borderWidth: 1
+            });
+          }
+          
+          if (hasDecafData) {
+            datasets.push({
+              label: 'Decaf Coffee',
+              data: data.decaf,
+              backgroundColor: secondaryColorAlpha,
+              borderColor: secondaryColor,
+              borderWidth: 1
+            });
+          }
+          
+          // If neither regular nor decaf data exists, fallback to a single dataset
+          if (datasets.length === 0) {
+            datasets = [{
+              label: 'Total Shots',
+              data: Array(labels.length).fill(0),
+              backgroundColor: primaryColorAlpha,
+              borderColor: primaryColor,
+              borderWidth: 1
+            }];
+          }
+        } else {
+          // Handle case where data is an array (for the monthly chart)
+          const dataArray = Array.isArray(data) ? data : Array(labels.length).fill(0);
+          datasets = [{
+            label: 'Total Shots',
+            data: dataArray,
+            backgroundColor: primaryColorAlpha,
+            borderColor: primaryColor,
+            borderWidth: 1,
+            tension: 0.3 // Makes line charts smoother
+          }];
+        }
+        
         window[`chart_${id}`] = new Chart(ctx, {
           type: chartType,
           data: {
             labels: labels,
-            datasets: [{
-              label: 'Total Shots',
-              data: data,
-              backgroundColor: primaryColorAlpha,
-              borderColor: primaryColor,
-              borderWidth: 1,
-              tension: 0.3 // Makes line charts smoother
-            }]
+            datasets: datasets
           },
           options: {
             responsive: true,
@@ -122,6 +184,7 @@ const { id, title, data, labels, chartType = 'bar' } = Astro.props;
             scales: {
               y: {
                 beginAtZero: true,
+                stacked: isStackedBar,
                 title: {
                   display: true,
                   text: 'Number of Shots',
@@ -142,9 +205,10 @@ const { id, title, data, labels, chartType = 'bar' } = Astro.props;
                 }
               },
               x: {
+                stacked: isStackedBar,
                 title: {
                   display: true,
-                  text: chartType === 'line' ? 'Date' : 'Month',
+                  text: chartType === 'line' ? 'Date' : (id === 'daily-shots-chart' ? 'Date' : 'Month'),
                   color: textColor,
                   font: {
                     family: fontFamily
@@ -174,6 +238,7 @@ const { id, title, data, labels, chartType = 'bar' } = Astro.props;
                   padding: 10
                 },
                 position: 'top',
+                display: isStackedBar ? true : true,
               },
               tooltip: {
                 backgroundColor: backgroundColor,
@@ -191,7 +256,7 @@ const { id, title, data, labels, chartType = 'bar' } = Astro.props;
                     return tooltipItems[0].label;
                   },
                   label: function(context) {
-                    return `${context.parsed.y} shots`;
+                    return `${context.dataset.label}: ${context.parsed.y} shots`;
                   }
                 }
               }

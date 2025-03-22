@@ -154,9 +154,75 @@ function processDailyData(records) {
     console.log("No records to process for daily chart");
     return {
       labels: [],
-      data: [],
+      data: { regular: [], decaf: [] },
     };
   }
+  
+  // Debug: Check for Coffee Bag field
+  const hasCoffeeBagField = records.some(record => 
+    record["Coffee Bag"] || record["Coffee Type"] || record["Bean"] || record["Beans"]);
+  
+  // Determine possible field names for coffee type
+  const fieldNames = records[0] ? Object.keys(records[0]) : [];
+  const possibleCoffeeFields = fieldNames.filter(field => 
+    field.toLowerCase().includes("coffee") || 
+    field.toLowerCase().includes("bean") || 
+    field.toLowerCase().includes("type"));
+  
+  // Get a more detailed sample of coffee bag values to understand their structure
+  const coffeeBagSamples = [];
+  
+  // Track unique coffee bag values
+  const uniqueCoffeeBags = new Set();
+  
+  // Get unique coffee bag values
+  records.forEach(record => {
+    if (record["Coffee Bag"]) {
+      const bagValue = String(record["Coffee Bag"]);
+      if (!uniqueCoffeeBags.has(bagValue)) {
+        uniqueCoffeeBags.add(bagValue);
+        
+        coffeeBagSamples.push({
+          value: record["Coffee Bag"],
+          type: typeof record["Coffee Bag"],
+          isArray: Array.isArray(record["Coffee Bag"]),
+          keys: typeof record["Coffee Bag"] === 'object' && !Array.isArray(record["Coffee Bag"]) ? 
+                Object.keys(record["Coffee Bag"]) : [],
+          stringValue: bagValue,
+          containsDecaf: bagValue.toLowerCase().includes('decaf')
+        });
+        
+        // Limit samples to avoid overloading the console
+        if (coffeeBagSamples.length >= 10) {
+          return;
+        }
+      }
+    }
+  });
+  
+  // Check how many records have decaf in their coffee bag field
+  const decafCount = records.filter(record => {
+    if (!record["Coffee Bag"]) return false;
+    
+    const bagValue = String(record["Coffee Bag"]).toLowerCase();
+    return bagValue.includes("decaf") || 
+           bagValue.includes("de-caf") || 
+           bagValue.includes("de caf");
+  }).length;
+  
+  console.log("Coffee fields check:", {
+    recordCount: records.length,
+    hasCoffeeBagField,
+    decafCount,
+    possibleCoffeeFields,
+    coffeeBagSamples,
+    sampleRecord: records[0] ? 
+      Object.fromEntries(
+        Object.entries(records[0]).filter(([key]) => 
+          possibleCoffeeFields.includes(key)
+        )
+      ) : null
+  });
 
   // Find the date field if "Start time" doesn't exist
   let dateField = "Start time";
@@ -173,7 +239,7 @@ function processDailyData(records) {
       console.log(`Using "${dateField}" as the date field for daily chart`);
     } else {
       console.log("No date/time field found in records for daily chart");
-      return { labels: [], data: [] };
+      return { labels: [], data: { regular: [], decaf: [] } };
     }
   }
 
@@ -182,8 +248,9 @@ function processDailyData(records) {
   sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
   sixtyDaysAgo.setHours(0, 0, 0, 0);
 
-  // Create a map to store counts by day
-  const dailyCounts = {};
+  // Create maps to store counts by day for regular and decaf shots
+  const regularCounts = {};
+  const decafCounts = {};
   let validDailyDateCount = 0;
 
   // Generate all dates in the past 60 days for the x-axis (even days with 0 shots)
@@ -194,10 +261,11 @@ function processDailyData(records) {
     date.setHours(0, 0, 0, 0);
     const dateStr = date.toISOString().split("T")[0];
     allDates.unshift(dateStr); // Add to front to maintain chronological order
-    dailyCounts[dateStr] = 0; // Initialize with 0
+    regularCounts[dateStr] = 0; // Initialize with 0
+    decafCounts[dateStr] = 0; // Initialize with 0
   }
 
-  // Count shots for each day
+  // Count shots for each day, separating decaf and regular
   records.forEach((record) => {
     // Skip records without a date field
     if (!record[dateField]) return;
@@ -220,8 +288,58 @@ function processDailyData(records) {
       // Format date as YYYY-MM-DD
       const dateStr = date.toISOString().split("T")[0];
 
-      // Increment the count for this day
-      dailyCounts[dateStr] = (dailyCounts[dateStr] || 0) + 1;
+      // Check if it's decaf based on various possible field names
+      // Handle both string values and link records (which could be strings or arrays)
+      let coffeeBagValue = "";
+      
+      // Get the Coffee Bag field, which could be a string, an array (linked record), or an object
+      const coffeeBagField = record["Coffee Bag"] || record["Coffee Type"] || record["Bean"] || record["Beans"];
+      
+      // Try different strategies to extract the coffee type value
+      if (typeof coffeeBagField === 'string') {
+        // Direct string value
+        coffeeBagValue = coffeeBagField;
+      } else if (Array.isArray(coffeeBagField)) {
+        // Linked record returned as an array of IDs or names
+        coffeeBagValue = coffeeBagField.join(" ");
+      } else if (coffeeBagField && typeof coffeeBagField === 'object') {
+        // For Airtable linked records, they might be stored in various formats
+        // Try to examine all properties and convert to string
+        const stringVal = String(coffeeBagField);
+        
+        // If it's an object representation, check if its string representation contains useful info
+        if (stringVal && stringVal !== "[object Object]") {
+          coffeeBagValue = stringVal;
+        } else {
+          // Try specific properties that might contain the name
+          coffeeBagValue = 
+            coffeeBagField.name || coffeeBagField.Name || 
+            coffeeBagField.value || coffeeBagField.Value || 
+            coffeeBagField.id || coffeeBagField.Id ||
+            Object.values(coffeeBagField).join(" ");
+        }
+      }
+      
+      // Ensure we have a string and check for decaf
+      // First try the extracted value
+      coffeeBagValue = String(coffeeBagValue).toLowerCase();
+      
+      // For linked records, just check the direct string representation as a fallback
+      const directStringValue = String(coffeeBagField).toLowerCase();
+      
+      const isDecaf = coffeeBagValue.includes("decaf") || 
+                     coffeeBagValue.includes("de-caf") || 
+                     coffeeBagValue.includes("de caf") ||
+                     directStringValue.includes("decaf") ||
+                     directStringValue.includes("de-caf") ||
+                     directStringValue.includes("de caf");
+
+      // Increment the appropriate counter
+      if (isDecaf) {
+        decafCounts[dateStr] = (decafCounts[dateStr] || 0) + 1;
+      } else {
+        regularCounts[dateStr] = (regularCounts[dateStr] || 0) + 1;
+      }
     } catch (e) {
       console.error(
         `Error processing date "${record[dateField]}" for daily chart:`,
@@ -230,7 +348,9 @@ function processDailyData(records) {
     }
   });
 
-  console.log(`Processed ${validDailyDateCount} valid dates for daily chart`);
+  // Count how many decaf shots were identified
+  const decafTotal = Object.values(decafCounts).reduce((sum, count) => sum + count, 0);
+  console.log(`Processed ${validDailyDateCount} valid dates for daily chart (${decafTotal} decaf shots identified)`);
 
   // Format dates for display (MM/DD)
   const formattedDates = allDates.map((date) => {
@@ -240,7 +360,10 @@ function processDailyData(records) {
 
   return {
     labels: formattedDates,
-    data: allDates.map((date) => dailyCounts[date]),
+    data: {
+      regular: allDates.map((date) => regularCounts[date]),
+      decaf: allDates.map((date) => decafCounts[date])
+    },
   };
 }
 
@@ -248,9 +371,29 @@ const { labels, data } = processMonthlyData(records);
 const { labels: dailyLabels, data: dailyData } = processDailyData(records);
 const hasData = labels.length > 0;
 const hasDailyData = dailyLabels.length > 0;
+const hasCoffeeTypeData = records.some(record => {
+  const coffeeField = record["Coffee Bag"] || record["Coffee Type"] || record["Bean"] || record["Beans"];
+  // Check various ways the coffee data could be stored
+  return (
+    // String value
+    (typeof coffeeField === 'string' && coffeeField.length > 0) ||
+    // Array value (linked records)
+    (Array.isArray(coffeeField) && coffeeField.length > 0) ||
+    // Object value
+    (coffeeField && typeof coffeeField === 'object')
+  );
+});
 
 console.log("Chart data:", { labels, data, hasData });
-console.log("Daily chart data:", { dailyLabels, dailyData, hasDailyData });
+console.log("Daily chart data:", { 
+  dailyLabels, 
+  dailyData, 
+  hasDailyData,
+  regularDataExists: dailyData && dailyData.regular,
+  decafDataExists: dailyData && dailyData.decaf,
+  regularLength: dailyData && dailyData.regular ? dailyData.regular.length : 0,
+  decafLength: dailyData && dailyData.decaf ? dailyData.decaf.length : 0
+});
 ---
 
 <Layout title="Espresso Shot Analytics">
@@ -299,10 +442,12 @@ console.log("Daily chart data:", { dailyLabels, dailyData, hasDailyData });
         hasDailyData ? (
           <Chart
             id="daily-shots-chart"
-            title="Daily Espresso Shots (Last 60 Days)"
+            title={hasCoffeeTypeData ? 
+              "Daily Espresso Shots by Type (Last 60 Days)" : 
+              "Daily Espresso Shots (Last 60 Days)"}
             data={dailyData}
             labels={dailyLabels}
-            chartType="line"
+            chartType="bar"
           />
         ) : (
           <div class="no-data">
