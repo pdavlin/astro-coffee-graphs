@@ -5,20 +5,22 @@ import { fetchRecords } from "../api/airtable";
 
 // Get current build time in America/Chicago timezone
 const now = new Date();
-const chicagoTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Chicago" }));
+const chicagoTime = new Date(
+  now.toLocaleString("en-US", { timeZone: "America/Chicago" }),
+);
 const year = chicagoTime.getFullYear();
-const month = String(chicagoTime.getMonth() + 1).padStart(2, '0');
-const day = String(chicagoTime.getDate()).padStart(2, '0');
+const month = String(chicagoTime.getMonth() + 1).padStart(2, "0");
+const day = String(chicagoTime.getDate()).padStart(2, "0");
 const hour = chicagoTime.getHours();
-const minute = String(chicagoTime.getMinutes()).padStart(2, '0');
-const ampm = hour >= 12 ? 'PM' : 'AM';
+const minute = String(chicagoTime.getMinutes()).padStart(2, "0");
+const ampm = hour >= 12 ? "PM" : "AM";
 const hour12 = hour % 12 || 12;
 
 // Determine if it's CDT or CST based on date
 const jan = new Date(chicagoTime.getFullYear(), 0, 1).getTimezoneOffset();
 const jul = new Date(chicagoTime.getFullYear(), 6, 1).getTimezoneOffset();
 const isDST = Math.max(jan, jul) !== chicagoTime.getTimezoneOffset();
-const timeZone = isDST ? 'CDT' : 'CST';
+const timeZone = isDST ? "CDT" : "CST";
 
 const buildTime = `${year}-${month}-${day} ${hour12}:${minute} ${ampm} ${timeZone}`;
 
@@ -102,30 +104,38 @@ function processMonthlyData(records) {
     // Skip records without a date field
     if (!record[dateField]) return;
 
-    // Convert to Date object
+    // Use raw date string without conversion
     try {
-      const date = new Date(record[dateField]);
-
-      if (isNaN(date.getTime())) {
+      const dateStr = record[dateField];
+      if (!dateStr) {
         console.log(`Invalid date: ${record[dateField]}`);
         return;
       }
-
-      // Skip December 2023
-      if (date.getMonth() === 11 && date.getFullYear() === 2023) {
+      
+      // Skip December 2023 - direct string check
+      if (dateStr.startsWith("2023-12")) {
         return;
       }
 
       validDateCount++;
 
-      // Create a month key in format "MMM YYYY" (e.g., "Jan 2023")
-      const monthYear = date.toLocaleString("en-US", {
-        month: "short",
-        year: "numeric",
-      });
+      // Extract month and year directly from the date string
+      // Format expected: "YYYY-MM-DD..." or similar
+      const parts = dateStr.split(/[-T\s]/);
+      if (parts.length >= 2) {
+        const year = parts[0];
+        const month = parseInt(parts[1]);
+        
+        // Create month names array for lookup
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+                           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        
+        // Create a month key in format "MMM YYYY" (e.g., "Jan 2023")
+        const monthYear = `${monthNames[month-1]} ${year}`;
 
-      // Increment the count for this month
-      monthlyCounts[monthYear] = (monthlyCounts[monthYear] || 0) + 1;
+        // Increment the count for this month
+        monthlyCounts[monthYear] = (monthlyCounts[monthYear] || 0) + 1;
+      }
     } catch (e) {
       console.error(`Error processing date "${record[dateField]}":`, e);
     }
@@ -136,9 +146,23 @@ function processMonthlyData(records) {
   );
   console.log("Monthly counts:", monthlyCounts);
 
-  // Sort the months chronologically
+  // Sort the months chronologically without Date objects
   const sortedMonths = Object.keys(monthlyCounts).sort((a, b) => {
-    return new Date(a) - new Date(b);
+    // Parse "MMM YYYY" format into components
+    const [monthA, yearA] = a.split(' ');
+    const [monthB, yearB] = b.split(' ');
+    
+    // Month name to number mapping for sorting
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    
+    // Compare years first
+    if (yearA !== yearB) {
+      return parseInt(yearA) - parseInt(yearB);
+    }
+    
+    // If years are the same, compare months
+    return monthNames.indexOf(monthA) - monthNames.indexOf(monthB);
   });
 
   return {
@@ -157,41 +181,51 @@ function processDailyData(records) {
       data: { regular: [], decaf: [] },
     };
   }
-  
+
   // Debug: Check for Coffee Bag field
-  const hasCoffeeBagField = records.some(record => 
-    record["Coffee Bag"] || record["Coffee Type"] || record["Bean"] || record["Beans"]);
-  
+  const hasCoffeeBagField = records.some(
+    (record) =>
+      record["Coffee Bag"] ||
+      record["Coffee Type"] ||
+      record["Bean"] ||
+      record["Beans"],
+  );
+
   // Determine possible field names for coffee type
   const fieldNames = records[0] ? Object.keys(records[0]) : [];
-  const possibleCoffeeFields = fieldNames.filter(field => 
-    field.toLowerCase().includes("coffee") || 
-    field.toLowerCase().includes("bean") || 
-    field.toLowerCase().includes("type"));
-  
+  const possibleCoffeeFields = fieldNames.filter(
+    (field) =>
+      field.toLowerCase().includes("coffee") ||
+      field.toLowerCase().includes("bean") ||
+      field.toLowerCase().includes("type"),
+  );
+
   // Get a more detailed sample of coffee bag values to understand their structure
   const coffeeBagSamples = [];
-  
+
   // Track unique coffee bag values
   const uniqueCoffeeBags = new Set();
-  
+
   // Get unique coffee bag values
-  records.forEach(record => {
+  records.forEach((record) => {
     if (record["Coffee Bag"]) {
       const bagValue = String(record["Coffee Bag"]);
       if (!uniqueCoffeeBags.has(bagValue)) {
         uniqueCoffeeBags.add(bagValue);
-        
+
         coffeeBagSamples.push({
           value: record["Coffee Bag"],
           type: typeof record["Coffee Bag"],
           isArray: Array.isArray(record["Coffee Bag"]),
-          keys: typeof record["Coffee Bag"] === 'object' && !Array.isArray(record["Coffee Bag"]) ? 
-                Object.keys(record["Coffee Bag"]) : [],
+          keys:
+            typeof record["Coffee Bag"] === "object" &&
+            !Array.isArray(record["Coffee Bag"])
+              ? Object.keys(record["Coffee Bag"])
+              : [],
           stringValue: bagValue,
-          containsDecaf: bagValue.toLowerCase().includes('decaf')
+          containsDecaf: bagValue.toLowerCase().includes("decaf"),
         });
-        
+
         // Limit samples to avoid overloading the console
         if (coffeeBagSamples.length >= 10) {
           return;
@@ -199,29 +233,32 @@ function processDailyData(records) {
       }
     }
   });
-  
+
   // Check how many records have decaf in their coffee bag field
-  const decafCount = records.filter(record => {
+  const decafCount = records.filter((record) => {
     if (!record["Coffee Bag"]) return false;
-    
+
     const bagValue = String(record["Coffee Bag"]).toLowerCase();
-    return bagValue.includes("decaf") || 
-           bagValue.includes("de-caf") || 
-           bagValue.includes("de caf");
+    return (
+      bagValue.includes("decaf") ||
+      bagValue.includes("de-caf") ||
+      bagValue.includes("de caf")
+    );
   }).length;
-  
+
   console.log("Coffee fields check:", {
     recordCount: records.length,
     hasCoffeeBagField,
     decafCount,
     possibleCoffeeFields,
     coffeeBagSamples,
-    sampleRecord: records[0] ? 
-      Object.fromEntries(
-        Object.entries(records[0]).filter(([key]) => 
-          possibleCoffeeFields.includes(key)
+    sampleRecord: records[0]
+      ? Object.fromEntries(
+          Object.entries(records[0]).filter(([key]) =>
+            possibleCoffeeFields.includes(key),
+          ),
         )
-      ) : null
+      : null,
   });
 
   // Find the date field if "Start time" doesn't exist
@@ -243,26 +280,50 @@ function processDailyData(records) {
     }
   }
 
-  // Calculate date 60 days ago
-  const sixtyDaysAgo = new Date();
-  sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-  sixtyDaysAgo.setHours(0, 0, 0, 0);
-
   // Create maps to store counts by day for regular and decaf shots
   const regularCounts = {};
   const decafCounts = {};
   let validDailyDateCount = 0;
 
-  // Generate all dates in the past 60 days for the x-axis (even days with 0 shots)
+  // Generate all dates in the past 60 days as strings without using Date objects
+  // This uses a simple string-based approach to generate dates
   const allDates = [];
+  
+  // Get current date parts (assuming YYYY-MM-DD format in inputs)
+  const today = new Date(); // We'll use one Date object just for initialization
+  let year = today.getFullYear();
+  let month = today.getMonth() + 1; // 1-12
+  let day = today.getDate();
+  
+  // Generate dates for the last 60 days
   for (let i = 0; i < 60; i++) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    date.setHours(0, 0, 0, 0);
-    const dateStr = date.toISOString().split("T")[0];
+    // Format date as YYYY-MM-DD
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     allDates.unshift(dateStr); // Add to front to maintain chronological order
     regularCounts[dateStr] = 0; // Initialize with 0
     decafCounts[dateStr] = 0; // Initialize with 0
+    
+    // Move one day back
+    day--;
+    // Handle month boundary
+    if (day === 0) {
+      month--;
+      // Handle year boundary
+      if (month === 0) {
+        month = 12;
+        year--;
+      }
+      // Set appropriate last day of month
+      if (month === 2) {
+        // February - handle leap years
+        const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+        day = isLeapYear ? 29 : 28;
+      } else if ([4, 6, 9, 11].includes(month)) {
+        day = 30; // April, June, September, November
+      } else {
+        day = 31; // January, March, May, July, August, October, December
+      }
+    }
   }
 
   // Count shots for each day, separating decaf and regular
@@ -270,69 +331,90 @@ function processDailyData(records) {
     // Skip records without a date field
     if (!record[dateField]) return;
 
-    // Convert to Date object
+    // Use raw date string without conversion
     try {
-      const date = new Date(record[dateField]);
-
-      if (isNaN(date.getTime())) {
+      const rawDateStr = record[dateField];
+      if (!rawDateStr) {
         return;
       }
 
-      // Skip dates older than 60 days
-      if (date < sixtyDaysAgo) {
+      // Extract date parts from raw string
+      // Expecting format like: YYYY-MM-DDT... or YYYY-MM-DD ...
+      const dateParts = rawDateStr.split(/[-T\s]/);
+      if (dateParts.length < 3) {
+        console.log(`Invalid date format: ${rawDateStr}`);
+        return;
+      }
+      
+      const year = parseInt(dateParts[0]);
+      const month = parseInt(dateParts[1]) - 1; // 0-based month
+      const day = parseInt(dateParts[2]);
+      
+      // Skip dates older than 60 days by comparing raw components
+      // This is a simple check without using Date objects
+      // Create a date string in YYYY-MM-DD format for comparison
+      const dateStr = `${dateParts[0]}-${String(dateParts[1]).padStart(2, '0')}-${String(dateParts[2]).padStart(2, '0')}`;
+      
+      // Simple string comparison for the last 60 dates in the allDates array
+      if (!allDates.includes(dateStr)) {
         return;
       }
 
       validDailyDateCount++;
 
-      // Format date as YYYY-MM-DD
-      const dateStr = date.toISOString().split("T")[0];
-
       // Check if it's decaf based on various possible field names
       // Handle both string values and link records (which could be strings or arrays)
       let coffeeBagValue = "";
-      
+
       // Get the Coffee Bag field, which could be a string, an array (linked record), or an object
-      const coffeeBagField = record["Coffee Bag"] || record["Coffee Type"] || record["Bean"] || record["Beans"];
-      
+      const coffeeBagField =
+        record["Coffee Bag"] ||
+        record["Coffee Type"] ||
+        record["Bean"] ||
+        record["Beans"];
+
       // Try different strategies to extract the coffee type value
-      if (typeof coffeeBagField === 'string') {
+      if (typeof coffeeBagField === "string") {
         // Direct string value
         coffeeBagValue = coffeeBagField;
       } else if (Array.isArray(coffeeBagField)) {
         // Linked record returned as an array of IDs or names
         coffeeBagValue = coffeeBagField.join(" ");
-      } else if (coffeeBagField && typeof coffeeBagField === 'object') {
+      } else if (coffeeBagField && typeof coffeeBagField === "object") {
         // For Airtable linked records, they might be stored in various formats
         // Try to examine all properties and convert to string
         const stringVal = String(coffeeBagField);
-        
+
         // If it's an object representation, check if its string representation contains useful info
         if (stringVal && stringVal !== "[object Object]") {
           coffeeBagValue = stringVal;
         } else {
           // Try specific properties that might contain the name
-          coffeeBagValue = 
-            coffeeBagField.name || coffeeBagField.Name || 
-            coffeeBagField.value || coffeeBagField.Value || 
-            coffeeBagField.id || coffeeBagField.Id ||
+          coffeeBagValue =
+            coffeeBagField.name ||
+            coffeeBagField.Name ||
+            coffeeBagField.value ||
+            coffeeBagField.Value ||
+            coffeeBagField.id ||
+            coffeeBagField.Id ||
             Object.values(coffeeBagField).join(" ");
         }
       }
-      
+
       // Ensure we have a string and check for decaf
       // First try the extracted value
       coffeeBagValue = String(coffeeBagValue).toLowerCase();
-      
+
       // For linked records, just check the direct string representation as a fallback
       const directStringValue = String(coffeeBagField).toLowerCase();
-      
-      const isDecaf = coffeeBagValue.includes("decaf") || 
-                     coffeeBagValue.includes("de-caf") || 
-                     coffeeBagValue.includes("de caf") ||
-                     directStringValue.includes("decaf") ||
-                     directStringValue.includes("de-caf") ||
-                     directStringValue.includes("de caf");
+
+      const isDecaf =
+        coffeeBagValue.includes("decaf") ||
+        coffeeBagValue.includes("de-caf") ||
+        coffeeBagValue.includes("de caf") ||
+        directStringValue.includes("decaf") ||
+        directStringValue.includes("de-caf") ||
+        directStringValue.includes("de caf");
 
       // Increment the appropriate counter
       if (isDecaf) {
@@ -349,10 +431,15 @@ function processDailyData(records) {
   });
 
   // Count how many decaf shots were identified
-  const decafTotal = Object.values(decafCounts).reduce((sum, count) => sum + count, 0);
-  console.log(`Processed ${validDailyDateCount} valid dates for daily chart (${decafTotal} decaf shots identified)`);
+  const decafTotal = Object.values(decafCounts).reduce(
+    (sum, count) => sum + count,
+    0,
+  );
+  console.log(
+    `Processed ${validDailyDateCount} valid dates for daily chart (${decafTotal} decaf shots identified)`,
+  );
 
-  // Format dates for display (MM/DD)
+  // Format dates for display (MM/DD) without using Date objects
   const formattedDates = allDates.map((date) => {
     const [year, month, day] = date.split("-");
     return `${month}/${day}`;
@@ -362,7 +449,7 @@ function processDailyData(records) {
     labels: formattedDates,
     data: {
       regular: allDates.map((date) => regularCounts[date]),
-      decaf: allDates.map((date) => decafCounts[date])
+      decaf: allDates.map((date) => decafCounts[date]),
     },
   };
 }
@@ -371,28 +458,32 @@ const { labels, data } = processMonthlyData(records);
 const { labels: dailyLabels, data: dailyData } = processDailyData(records);
 const hasData = labels.length > 0;
 const hasDailyData = dailyLabels.length > 0;
-const hasCoffeeTypeData = records.some(record => {
-  const coffeeField = record["Coffee Bag"] || record["Coffee Type"] || record["Bean"] || record["Beans"];
+const hasCoffeeTypeData = records.some((record) => {
+  const coffeeField =
+    record["Coffee Bag"] ||
+    record["Coffee Type"] ||
+    record["Bean"] ||
+    record["Beans"];
   // Check various ways the coffee data could be stored
   return (
     // String value
-    (typeof coffeeField === 'string' && coffeeField.length > 0) ||
+    (typeof coffeeField === "string" && coffeeField.length > 0) ||
     // Array value (linked records)
     (Array.isArray(coffeeField) && coffeeField.length > 0) ||
     // Object value
-    (coffeeField && typeof coffeeField === 'object')
+    (coffeeField && typeof coffeeField === "object")
   );
 });
 
 console.log("Chart data:", { labels, data, hasData });
-console.log("Daily chart data:", { 
-  dailyLabels, 
-  dailyData, 
+console.log("Daily chart data:", {
+  dailyLabels,
+  dailyData,
   hasDailyData,
   regularDataExists: dailyData && dailyData.regular,
   decafDataExists: dailyData && dailyData.decaf,
   regularLength: dailyData && dailyData.regular ? dailyData.regular.length : 0,
-  decafLength: dailyData && dailyData.decaf ? dailyData.decaf.length : 0
+  decafLength: dailyData && dailyData.decaf ? dailyData.decaf.length : 0,
 });
 ---
 
@@ -406,10 +497,7 @@ console.log("Daily chart data:", {
         <div class="error-message">
           <h2>Configuration Error</h2>
           <p>{errorMessage}</p>
-          <p>
-            Please check your .env file and ensure your Airtable credentials are
-            correct.
-          </p>
+          <p>Please bug Patrick about fixing this</p>
         </div>
       )
     }
@@ -442,9 +530,11 @@ console.log("Daily chart data:", {
         hasDailyData ? (
           <Chart
             id="daily-shots-chart"
-            title={hasCoffeeTypeData ? 
-              "Daily Espresso Shots by Type (Last 60 Days)" : 
-              "Daily Espresso Shots (Last 60 Days)"}
+            title={
+              hasCoffeeTypeData
+                ? "Daily Espresso Shots by Type (Last 60 Days)"
+                : "Daily Espresso Shots (Last 60 Days)"
+            }
             data={dailyData}
             labels={dailyLabels}
             chartType="bar"
@@ -493,7 +583,7 @@ console.log("Daily chart data:", {
     font-family: var(--font-primary);
     color: var(--text-primary);
   }
-  
+
   .build-time {
     text-align: center;
     margin-bottom: 2rem;
