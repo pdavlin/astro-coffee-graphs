@@ -6,7 +6,7 @@ import { fetchRecords } from "../api/airtable";
 // Get current build time in America/Chicago timezone
 const now = new Date();
 const chicagoTime = new Date(
-  now.toLocaleString("en-US", { timeZone: "America/Chicago" }),
+    now.toLocaleString("en-US", { timeZone: "America/Chicago" }),
 );
 const year = chicagoTime.getFullYear();
 const month = String(chicagoTime.getMonth() + 1).padStart(2, "0");
@@ -28,624 +28,781 @@ const buildTime = `${year}-${month}-${day} ${hour12}:${minute} ${ampm} ${timeZon
 let records = [];
 let errorMessage = "";
 let debugInfo = {
-  recordCount: 0,
-  hasStartTime: false,
-  startTimeFieldName: null,
-  availableFields: [],
-  dateExample: null,
+    recordCount: 0,
+    hasStartTime: false,
+    startTimeFieldName: null,
+    availableFields: [],
+    dateExample: null,
 };
 
 try {
-  records = await fetchRecords("Shots");
+    records = await fetchRecords("Shots");
 
-  // Collect debug info
-  debugInfo.recordCount = records.length;
-  if (records.length > 0) {
-    debugInfo.availableFields = Object.keys(records[0]);
+    // Collect debug info
+    debugInfo.recordCount = records.length;
+    if (records.length > 0) {
+        debugInfo.availableFields = Object.keys(records[0]);
 
-    // Check for date/time fields
-    const dateFields = Object.entries(records[0]).filter(([key, value]) => {
-      return (
-        typeof value === "string" &&
-        (key.toLowerCase().includes("date") ||
-          key.toLowerCase().includes("time") ||
-          (typeof value === "string" && value.match(/^\d{4}-\d{2}-\d{2}/)))
-      );
-    });
+        // Check for date/time fields
+        const dateFields = Object.entries(records[0]).filter(([key, value]) => {
+            return (
+                typeof value === "string" &&
+                (key.toLowerCase().includes("date") ||
+                    key.toLowerCase().includes("time") ||
+                    (typeof value === "string" &&
+                        value.match(/^\d{4}-\d{2}-\d{2}/)))
+            );
+        });
 
-    if (dateFields.length > 0) {
-      debugInfo.startTimeFieldName = dateFields[0][0];
-      debugInfo.dateExample = dateFields[0][1];
-      debugInfo.hasStartTime = true;
+        if (dateFields.length > 0) {
+            debugInfo.startTimeFieldName = dateFields[0][0];
+            debugInfo.dateExample = dateFields[0][1];
+            debugInfo.hasStartTime = true;
+        }
     }
-  }
 } catch (e) {
-  errorMessage = e.message;
-  console.error("Error in page component:", e);
+    errorMessage = e.message;
+    console.error("Error in page component:", e);
 }
 
 // Process data for the monthly espresso shots chart
 function processMonthlyData(records) {
-  // Handle empty records
-  if (!records || records.length === 0) {
-    console.log("No records to process");
-    return {
-      labels: [],
-      data: [],
-    };
-  }
+    // Handle empty records
+    if (!records || records.length === 0) {
+        console.log("No records to process");
+        return {
+            labels: [],
+            data: [],
+        };
+    }
 
-  // Find the date field if "Start time" doesn't exist
-  let dateField = "Start time";
-  if (records[0] && !records[0][dateField]) {
-    // Look for alternative date fields
-    const possibleFields = Object.keys(records[0]).filter(
-      (field) =>
-        field.toLowerCase().includes("date") ||
-        field.toLowerCase().includes("time"),
+    // Find the date field if "Start time" doesn't exist
+    let dateField = "Start time";
+    if (records[0] && !records[0][dateField]) {
+        // Look for alternative date fields
+        const possibleFields = Object.keys(records[0]).filter(
+            (field) =>
+                field.toLowerCase().includes("date") ||
+                field.toLowerCase().includes("time"),
+        );
+
+        if (possibleFields.length > 0) {
+            dateField = possibleFields[0];
+            console.log(
+                `Using "${dateField}" as the date field instead of "Start time"`,
+            );
+        } else {
+            console.log("No date/time field found in records");
+            return { labels: [], data: [] };
+        }
+    }
+
+    // Create a map to store counts by month
+    const monthlyCounts = {};
+    let validDateCount = 0;
+
+    records.forEach((record) => {
+        // Skip records without a date field
+        if (!record[dateField]) return;
+
+        // Use raw date string without conversion
+        try {
+            const dateStr = record[dateField];
+            if (!dateStr) {
+                console.log(`Invalid date: ${record[dateField]}`);
+                return;
+            }
+
+            // Skip December 2023 - direct string check
+            if (dateStr.startsWith("2023-12")) {
+                return;
+            }
+
+            validDateCount++;
+
+            // Extract month and year directly from the date string
+            // Format expected: "YYYY-MM-DD..." or similar
+            const parts = dateStr.split(/[-T\s]/);
+            if (parts.length >= 2) {
+                const year = parts[0];
+                const month = parseInt(parts[1]);
+
+                // Create month names array for lookup
+                const monthNames = [
+                    "Jan",
+                    "Feb",
+                    "Mar",
+                    "Apr",
+                    "May",
+                    "Jun",
+                    "Jul",
+                    "Aug",
+                    "Sep",
+                    "Oct",
+                    "Nov",
+                    "Dec",
+                ];
+
+                // Create a month key in format "MMM YYYY" (e.g., "Jan 2023")
+                const monthYear = `${monthNames[month - 1]} ${year}`;
+
+                // Increment the count for this month
+                monthlyCounts[monthYear] = (monthlyCounts[monthYear] || 0) + 1;
+            }
+        } catch (e) {
+            console.error(`Error processing date "${record[dateField]}":`, e);
+        }
+    });
+
+    console.log(
+        `Processed ${validDateCount} valid dates out of ${records.length} records`,
     );
+    console.log("Monthly counts:", monthlyCounts);
 
-    if (possibleFields.length > 0) {
-      dateField = possibleFields[0];
-      console.log(
-        `Using "${dateField}" as the date field instead of "Start time"`,
-      );
-    } else {
-      console.log("No date/time field found in records");
-      return { labels: [], data: [] };
-    }
-  }
+    // Sort the months chronologically without Date objects
+    const sortedMonths = Object.keys(monthlyCounts).sort((a, b) => {
+        // Parse "MMM YYYY" format into components
+        const [monthA, yearA] = a.split(" ");
+        const [monthB, yearB] = b.split(" ");
 
-  // Create a map to store counts by month
-  const monthlyCounts = {};
-  let validDateCount = 0;
+        // Month name to number mapping for sorting
+        const monthNames = [
+            "Jan",
+            "Feb",
+            "Mar",
+            "Apr",
+            "May",
+            "Jun",
+            "Jul",
+            "Aug",
+            "Sep",
+            "Oct",
+            "Nov",
+            "Dec",
+        ];
 
-  records.forEach((record) => {
-    // Skip records without a date field
-    if (!record[dateField]) return;
+        // Compare years first
+        if (yearA !== yearB) {
+            return parseInt(yearA) - parseInt(yearB);
+        }
 
-    // Use raw date string without conversion
-    try {
-      const dateStr = record[dateField];
-      if (!dateStr) {
-        console.log(`Invalid date: ${record[dateField]}`);
-        return;
-      }
-      
-      // Skip December 2023 - direct string check
-      if (dateStr.startsWith("2023-12")) {
-        return;
-      }
+        // If years are the same, compare months
+        return monthNames.indexOf(monthA) - monthNames.indexOf(monthB);
+    });
 
-      validDateCount++;
-
-      // Extract month and year directly from the date string
-      // Format expected: "YYYY-MM-DD..." or similar
-      const parts = dateStr.split(/[-T\s]/);
-      if (parts.length >= 2) {
-        const year = parts[0];
-        const month = parseInt(parts[1]);
-        
-        // Create month names array for lookup
-        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", 
-                           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        
-        // Create a month key in format "MMM YYYY" (e.g., "Jan 2023")
-        const monthYear = `${monthNames[month-1]} ${year}`;
-
-        // Increment the count for this month
-        monthlyCounts[monthYear] = (monthlyCounts[monthYear] || 0) + 1;
-      }
-    } catch (e) {
-      console.error(`Error processing date "${record[dateField]}":`, e);
-    }
-  });
-
-  console.log(
-    `Processed ${validDateCount} valid dates out of ${records.length} records`,
-  );
-  console.log("Monthly counts:", monthlyCounts);
-
-  // Sort the months chronologically without Date objects
-  const sortedMonths = Object.keys(monthlyCounts).sort((a, b) => {
-    // Parse "MMM YYYY" format into components
-    const [monthA, yearA] = a.split(' ');
-    const [monthB, yearB] = b.split(' ');
-    
-    // Month name to number mapping for sorting
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", 
-                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    
-    // Compare years first
-    if (yearA !== yearB) {
-      return parseInt(yearA) - parseInt(yearB);
-    }
-    
-    // If years are the same, compare months
-    return monthNames.indexOf(monthA) - monthNames.indexOf(monthB);
-  });
-
-  return {
-    labels: sortedMonths,
-    data: sortedMonths.map((month) => monthlyCounts[month]),
-  };
+    return {
+        labels: sortedMonths,
+        data: sortedMonths.map((month) => monthlyCounts[month]),
+    };
 }
 
 // Process data for the daily shots (last 60 days)
 function processDailyData(records) {
-  // Handle empty records
-  if (!records || records.length === 0) {
-    console.log("No records to process for daily chart");
-    return {
-      labels: [],
-      data: { regular: [], decaf: [] },
-    };
-  }
+    // Handle empty records
+    if (!records || records.length === 0) {
+        console.log("No records to process for daily chart");
+        return {
+            labels: [],
+            data: { regular: [], decaf: [] },
+        };
+    }
 
-  // Debug: Check for Coffee Bag field
-  const hasCoffeeBagField = records.some(
-    (record) =>
-      record["Coffee Bag"] ||
-      record["Coffee Type"] ||
-      record["Bean"] ||
-      record["Beans"],
-  );
+    // Debug: Check for Coffee Bag field
+    const hasCoffeeBagField = records.some(
+        (record) =>
+            record["Coffee Bag"] ||
+            record["Coffee Type"] ||
+            record["Bean"] ||
+            record["Beans"],
+    );
 
-  // Determine possible field names for coffee type
-  const fieldNames = records[0] ? Object.keys(records[0]) : [];
-  const possibleCoffeeFields = fieldNames.filter(
-    (field) =>
-      field.toLowerCase().includes("coffee") ||
-      field.toLowerCase().includes("bean") ||
-      field.toLowerCase().includes("type"),
-  );
+    // Determine possible field names for coffee type
+    const fieldNames = records[0] ? Object.keys(records[0]) : [];
+    const possibleCoffeeFields = fieldNames.filter(
+        (field) =>
+            field.toLowerCase().includes("coffee") ||
+            field.toLowerCase().includes("bean") ||
+            field.toLowerCase().includes("type"),
+    );
 
-  // Get a more detailed sample of coffee bag values to understand their structure
-  const coffeeBagSamples = [];
+    // Get a more detailed sample of coffee bag values to understand their structure
+    const coffeeBagSamples = [];
 
-  // Track unique coffee bag values
-  const uniqueCoffeeBags = new Set();
+    // Track unique coffee bag values
+    const uniqueCoffeeBags = new Set();
 
-  // Get unique coffee bag values
-  records.forEach((record) => {
-    if (record["Coffee Bag"]) {
-      const bagValue = String(record["Coffee Bag"]);
-      if (!uniqueCoffeeBags.has(bagValue)) {
-        uniqueCoffeeBags.add(bagValue);
+    // Get unique coffee bag values
+    records.forEach((record) => {
+        if (record["Coffee Bag"]) {
+            const bagValue = String(record["Coffee Bag"]);
+            if (!uniqueCoffeeBags.has(bagValue)) {
+                uniqueCoffeeBags.add(bagValue);
 
-        coffeeBagSamples.push({
-          value: record["Coffee Bag"],
-          type: typeof record["Coffee Bag"],
-          isArray: Array.isArray(record["Coffee Bag"]),
-          keys:
-            typeof record["Coffee Bag"] === "object" &&
-            !Array.isArray(record["Coffee Bag"])
-              ? Object.keys(record["Coffee Bag"])
-              : [],
-          stringValue: bagValue,
-          containsDecaf: bagValue.toLowerCase().includes("decaf"),
-        });
+                coffeeBagSamples.push({
+                    value: record["Coffee Bag"],
+                    type: typeof record["Coffee Bag"],
+                    isArray: Array.isArray(record["Coffee Bag"]),
+                    keys:
+                        typeof record["Coffee Bag"] === "object" &&
+                        !Array.isArray(record["Coffee Bag"])
+                            ? Object.keys(record["Coffee Bag"])
+                            : [],
+                    stringValue: bagValue,
+                    containsDecaf: bagValue.toLowerCase().includes("decaf"),
+                });
 
-        // Limit samples to avoid overloading the console
-        if (coffeeBagSamples.length >= 10) {
-          return;
+                // Limit samples to avoid overloading the console
+                if (coffeeBagSamples.length >= 10) {
+                    return;
+                }
+            }
         }
-      }
-    }
-  });
+    });
 
-  // Check how many records have decaf in their coffee bag field
-  const decafCount = records.filter((record) => {
-    if (!record["Coffee Bag"]) return false;
+    // Check how many records have decaf in their coffee bag field
+    const decafCount = records.filter((record) => {
+        if (!record["Coffee Bag"]) return false;
 
-    const bagValue = String(record["Coffee Bag"]).toLowerCase();
-    return (
-      bagValue.includes("decaf") ||
-      bagValue.includes("de-caf") ||
-      bagValue.includes("de caf")
-    );
-  }).length;
+        const bagValue = String(record["Coffee Bag"]).toLowerCase();
+        return (
+            bagValue.includes("decaf") ||
+            bagValue.includes("de-caf") ||
+            bagValue.includes("de caf")
+        );
+    }).length;
 
-  console.log("Coffee fields check:", {
-    recordCount: records.length,
-    hasCoffeeBagField,
-    decafCount,
-    possibleCoffeeFields,
-    coffeeBagSamples,
-    sampleRecord: records[0]
-      ? Object.fromEntries(
-          Object.entries(records[0]).filter(([key]) =>
-            possibleCoffeeFields.includes(key),
-          ),
-        )
-      : null,
-  });
+    console.log("Coffee fields check:", {
+        recordCount: records.length,
+        hasCoffeeBagField,
+        decafCount,
+        possibleCoffeeFields,
+        coffeeBagSamples,
+        sampleRecord: records[0]
+            ? Object.fromEntries(
+                  Object.entries(records[0]).filter(([key]) =>
+                      possibleCoffeeFields.includes(key),
+                  ),
+              )
+            : null,
+    });
 
-  // Find the date field if "Start time" doesn't exist
-  let dateField = "Start time";
-  if (records[0] && !records[0][dateField]) {
-    // Look for alternative date fields
-    const possibleFields = Object.keys(records[0]).filter(
-      (field) =>
-        field.toLowerCase().includes("date") ||
-        field.toLowerCase().includes("time"),
-    );
+    // Find the date field if "Start time" doesn't exist
+    let dateField = "Start time";
+    if (records[0] && !records[0][dateField]) {
+        // Look for alternative date fields
+        const possibleFields = Object.keys(records[0]).filter(
+            (field) =>
+                field.toLowerCase().includes("date") ||
+                field.toLowerCase().includes("time"),
+        );
 
-    if (possibleFields.length > 0) {
-      dateField = possibleFields[0];
-      console.log(`Using "${dateField}" as the date field for daily chart`);
-    } else {
-      console.log("No date/time field found in records for daily chart");
-      return { labels: [], data: { regular: [], decaf: [] } };
-    }
-  }
-
-  // Create maps to store counts by day for regular and decaf shots
-  const regularCounts = {};
-  const decafCounts = {};
-  let validDailyDateCount = 0;
-
-  // Generate all dates in the past 60 days as strings without using Date objects
-  // This uses a simple string-based approach to generate dates
-  const allDates = [];
-  
-  // Get current date parts (assuming YYYY-MM-DD format in inputs)
-  const today = new Date(); // We'll use one Date object just for initialization
-  let year = today.getFullYear();
-  let month = today.getMonth() + 1; // 1-12
-  let day = today.getDate();
-  
-  // Generate dates for the last 60 days
-  for (let i = 0; i < 60; i++) {
-    // Format date as YYYY-MM-DD
-    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    allDates.unshift(dateStr); // Add to front to maintain chronological order
-    regularCounts[dateStr] = 0; // Initialize with 0
-    decafCounts[dateStr] = 0; // Initialize with 0
-    
-    // Move one day back
-    day--;
-    // Handle month boundary
-    if (day === 0) {
-      month--;
-      // Handle year boundary
-      if (month === 0) {
-        month = 12;
-        year--;
-      }
-      // Set appropriate last day of month
-      if (month === 2) {
-        // February - handle leap years
-        const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
-        day = isLeapYear ? 29 : 28;
-      } else if ([4, 6, 9, 11].includes(month)) {
-        day = 30; // April, June, September, November
-      } else {
-        day = 31; // January, March, May, July, August, October, December
-      }
-    }
-  }
-
-  // Count shots for each day, separating decaf and regular
-  records.forEach((record) => {
-    // Skip records without a date field
-    if (!record[dateField]) return;
-
-    // Use raw date string without conversion
-    try {
-      const rawDateStr = record[dateField];
-      if (!rawDateStr) {
-        return;
-      }
-
-      // Extract date parts from raw string
-      // Expecting format like: YYYY-MM-DDT... or YYYY-MM-DD ...
-      const dateParts = rawDateStr.split(/[-T\s]/);
-      if (dateParts.length < 3) {
-        console.log(`Invalid date format: ${rawDateStr}`);
-        return;
-      }
-      
-      const year = parseInt(dateParts[0]);
-      const month = parseInt(dateParts[1]) - 1; // 0-based month
-      const day = parseInt(dateParts[2]);
-      
-      // Skip dates older than 60 days by comparing raw components
-      // This is a simple check without using Date objects
-      // Create a date string in YYYY-MM-DD format for comparison
-      const dateStr = `${dateParts[0]}-${String(dateParts[1]).padStart(2, '0')}-${String(dateParts[2]).padStart(2, '0')}`;
-      
-      // Simple string comparison for the last 60 dates in the allDates array
-      if (!allDates.includes(dateStr)) {
-        return;
-      }
-
-      validDailyDateCount++;
-
-      // Check if it's decaf based on various possible field names
-      // Handle both string values and link records (which could be strings or arrays)
-      let coffeeBagValue = "";
-
-      // Get the Coffee Bag field, which could be a string, an array (linked record), or an object
-      const coffeeBagField =
-        record["Coffee Bag"] ||
-        record["Coffee Type"] ||
-        record["Bean"] ||
-        record["Beans"];
-
-      // Try different strategies to extract the coffee type value
-      if (typeof coffeeBagField === "string") {
-        // Direct string value
-        coffeeBagValue = coffeeBagField;
-      } else if (Array.isArray(coffeeBagField)) {
-        // Linked record returned as an array of IDs or names
-        coffeeBagValue = coffeeBagField.join(" ");
-      } else if (coffeeBagField && typeof coffeeBagField === "object") {
-        // For Airtable linked records, they might be stored in various formats
-        // Try to examine all properties and convert to string
-        const stringVal = String(coffeeBagField);
-
-        // If it's an object representation, check if its string representation contains useful info
-        if (stringVal && stringVal !== "[object Object]") {
-          coffeeBagValue = stringVal;
+        if (possibleFields.length > 0) {
+            dateField = possibleFields[0];
+            console.log(
+                `Using "${dateField}" as the date field for daily chart`,
+            );
         } else {
-          // Try specific properties that might contain the name
-          coffeeBagValue =
-            coffeeBagField.name ||
-            coffeeBagField.Name ||
-            coffeeBagField.value ||
-            coffeeBagField.Value ||
-            coffeeBagField.id ||
-            coffeeBagField.Id ||
-            Object.values(coffeeBagField).join(" ");
+            console.log("No date/time field found in records for daily chart");
+            return { labels: [], data: { regular: [], decaf: [] } };
         }
-      }
-
-      // Ensure we have a string and check for decaf
-      // First try the extracted value
-      coffeeBagValue = String(coffeeBagValue).toLowerCase();
-
-      // For linked records, just check the direct string representation as a fallback
-      const directStringValue = String(coffeeBagField).toLowerCase();
-
-      const isDecaf =
-        coffeeBagValue.includes("decaf") ||
-        coffeeBagValue.includes("de-caf") ||
-        coffeeBagValue.includes("de caf") ||
-        directStringValue.includes("decaf") ||
-        directStringValue.includes("de-caf") ||
-        directStringValue.includes("de caf");
-
-      // Increment the appropriate counter
-      if (isDecaf) {
-        decafCounts[dateStr] = (decafCounts[dateStr] || 0) + 1;
-      } else {
-        regularCounts[dateStr] = (regularCounts[dateStr] || 0) + 1;
-      }
-    } catch (e) {
-      console.error(
-        `Error processing date "${record[dateField]}" for daily chart:`,
-        e,
-      );
     }
-  });
 
-  // Count how many decaf shots were identified
-  const decafTotal = Object.values(decafCounts).reduce(
-    (sum, count) => sum + count,
-    0,
-  );
-  console.log(
-    `Processed ${validDailyDateCount} valid dates for daily chart (${decafTotal} decaf shots identified)`,
-  );
+    // Create maps to store counts by day for regular and decaf shots
+    const regularCounts = {};
+    const decafCounts = {};
+    let validDailyDateCount = 0;
 
-  // Format dates for display (MM/DD) without using Date objects
-  const formattedDates = allDates.map((date) => {
-    const [year, month, day] = date.split("-");
-    return `${month}/${day}`;
-  });
+    // Generate all dates in the past 60 days as strings without using Date objects
+    // This uses a simple string-based approach to generate dates
+    const allDates = [];
 
-  return {
-    labels: formattedDates,
-    data: {
-      regular: allDates.map((date) => regularCounts[date]),
-      decaf: allDates.map((date) => decafCounts[date]),
-    },
-  };
+    // Get current date parts (assuming YYYY-MM-DD format in inputs)
+    const today = new Date(); // We'll use one Date object just for initialization
+    let year = today.getFullYear();
+    let month = today.getMonth() + 1; // 1-12
+    let day = today.getDate();
+
+    // Generate dates for the last 60 days
+    for (let i = 0; i < 60; i++) {
+        // Format date as YYYY-MM-DD
+        const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        allDates.unshift(dateStr); // Add to front to maintain chronological order
+        regularCounts[dateStr] = 0; // Initialize with 0
+        decafCounts[dateStr] = 0; // Initialize with 0
+
+        // Move one day back
+        day--;
+        // Handle month boundary
+        if (day === 0) {
+            month--;
+            // Handle year boundary
+            if (month === 0) {
+                month = 12;
+                year--;
+            }
+            // Set appropriate last day of month
+            if (month === 2) {
+                // February - handle leap years
+                const isLeapYear =
+                    (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+                day = isLeapYear ? 29 : 28;
+            } else if ([4, 6, 9, 11].includes(month)) {
+                day = 30; // April, June, September, November
+            } else {
+                day = 31; // January, March, May, July, August, October, December
+            }
+        }
+    }
+
+    // Count shots for each day, separating decaf and regular
+    records.forEach((record) => {
+        // Skip records without a date field
+        if (!record[dateField]) return;
+
+        // Use raw date string without conversion
+        try {
+            const rawDateStr = record[dateField];
+            if (!rawDateStr) {
+                return;
+            }
+
+            // Extract date parts from raw string
+            // Expecting format like: YYYY-MM-DDT... or YYYY-MM-DD ...
+            const dateParts = rawDateStr.split(/[-T\s]/);
+            if (dateParts.length < 3) {
+                console.log(`Invalid date format: ${rawDateStr}`);
+                return;
+            }
+
+            const year = parseInt(dateParts[0]);
+            const month = parseInt(dateParts[1]) - 1; // 0-based month
+            const day = parseInt(dateParts[2]);
+
+            // Skip dates older than 60 days by comparing raw components
+            // This is a simple check without using Date objects
+            // Create a date string in YYYY-MM-DD format for comparison
+            const dateStr = `${dateParts[0]}-${String(dateParts[1]).padStart(2, "0")}-${String(dateParts[2]).padStart(2, "0")}`;
+
+            // Simple string comparison for the last 60 dates in the allDates array
+            if (!allDates.includes(dateStr)) {
+                return;
+            }
+
+            validDailyDateCount++;
+
+            // Check if it's decaf based on various possible field names
+            // Handle both string values and link records (which could be strings or arrays)
+            let coffeeBagValue = "";
+
+            // Get the Coffee Bag field, which could be a string, an array (linked record), or an object
+            const coffeeBagField =
+                record["Coffee Bag"] ||
+                record["Coffee Type"] ||
+                record["Bean"] ||
+                record["Beans"];
+
+            // Try different strategies to extract the coffee type value
+            if (typeof coffeeBagField === "string") {
+                // Direct string value
+                coffeeBagValue = coffeeBagField;
+            } else if (Array.isArray(coffeeBagField)) {
+                // Linked record returned as an array of IDs or names
+                coffeeBagValue = coffeeBagField.join(" ");
+            } else if (coffeeBagField && typeof coffeeBagField === "object") {
+                // For Airtable linked records, they might be stored in various formats
+                // Try to examine all properties and convert to string
+                const stringVal = String(coffeeBagField);
+
+                // If it's an object representation, check if its string representation contains useful info
+                if (stringVal && stringVal !== "[object Object]") {
+                    coffeeBagValue = stringVal;
+                } else {
+                    // Try specific properties that might contain the name
+                    coffeeBagValue =
+                        coffeeBagField.name ||
+                        coffeeBagField.Name ||
+                        coffeeBagField.value ||
+                        coffeeBagField.Value ||
+                        coffeeBagField.id ||
+                        coffeeBagField.Id ||
+                        Object.values(coffeeBagField).join(" ");
+                }
+            }
+
+            // Ensure we have a string and check for decaf
+            // First try the extracted value
+            coffeeBagValue = String(coffeeBagValue).toLowerCase();
+
+            // For linked records, just check the direct string representation as a fallback
+            const directStringValue = String(coffeeBagField).toLowerCase();
+
+            const isDecaf =
+                coffeeBagValue.includes("decaf") ||
+                coffeeBagValue.includes("de-caf") ||
+                coffeeBagValue.includes("de caf") ||
+                directStringValue.includes("decaf") ||
+                directStringValue.includes("de-caf") ||
+                directStringValue.includes("de caf");
+
+            // Increment the appropriate counter
+            if (isDecaf) {
+                decafCounts[dateStr] = (decafCounts[dateStr] || 0) + 1;
+            } else {
+                regularCounts[dateStr] = (regularCounts[dateStr] || 0) + 1;
+            }
+        } catch (e) {
+            console.error(
+                `Error processing date "${record[dateField]}" for daily chart:`,
+                e,
+            );
+        }
+    });
+
+    // Count how many decaf shots were identified
+    const decafTotal = Object.values(decafCounts).reduce(
+        (sum, count) => sum + count,
+        0,
+    );
+    console.log(
+        `Processed ${validDailyDateCount} valid dates for daily chart (${decafTotal} decaf shots identified)`,
+    );
+
+    // Format dates for display (MM/DD) without using Date objects
+    const formattedDates = allDates.map((date) => {
+        const [year, month, day] = date.split("-");
+        return `${month}/${day}`;
+    });
+
+    return {
+        labels: formattedDates,
+        data: {
+            regular: allDates.map((date) => regularCounts[date]),
+            decaf: allDates.map((date) => decafCounts[date]),
+        },
+    };
 }
 
 const { labels, data } = processMonthlyData(records);
 const { labels: dailyLabels, data: dailyData } = processDailyData(records);
 const hasData = labels.length > 0;
 const hasDailyData = dailyLabels.length > 0;
+
+// Calculate top and bottom three months
+function getTopMonths(labels, data) {
+    if (!labels || !data || labels.length === 0 || data.length === 0) {
+        return { topThree: [] };
+    }
+
+    // Create array of month-count pairs
+    const monthData = labels.map((label, index) => ({
+        month: label,
+        count: data[index],
+    }));
+
+    // Sort by count (descending for top, ascending for bottom)
+    const sortedByCount = [...monthData].sort((a, b) => b.count - a.count);
+
+    const topThree = sortedByCount.slice(0, 3);
+
+    return { topThree };
+}
+
+const { topThree } = getTopMonths(labels, data);
 const hasCoffeeTypeData = records.some((record) => {
-  const coffeeField =
-    record["Coffee Bag"] ||
-    record["Coffee Type"] ||
-    record["Bean"] ||
-    record["Beans"];
-  // Check various ways the coffee data could be stored
-  return (
-    // String value
-    (typeof coffeeField === "string" && coffeeField.length > 0) ||
-    // Array value (linked records)
-    (Array.isArray(coffeeField) && coffeeField.length > 0) ||
-    // Object value
-    (coffeeField && typeof coffeeField === "object")
-  );
+    const coffeeField =
+        record["Coffee Bag"] ||
+        record["Coffee Type"] ||
+        record["Bean"] ||
+        record["Beans"];
+    // Check various ways the coffee data could be stored
+    return (
+        // String value
+        (typeof coffeeField === "string" && coffeeField.length > 0) ||
+        // Array value (linked records)
+        (Array.isArray(coffeeField) && coffeeField.length > 0) ||
+        // Object value
+        (coffeeField && typeof coffeeField === "object")
+    );
 });
 
 console.log("Chart data:", { labels, data, hasData });
 console.log("Daily chart data:", {
-  dailyLabels,
-  dailyData,
-  hasDailyData,
-  regularDataExists: dailyData && dailyData.regular,
-  decafDataExists: dailyData && dailyData.decaf,
-  regularLength: dailyData && dailyData.regular ? dailyData.regular.length : 0,
-  decafLength: dailyData && dailyData.decaf ? dailyData.decaf.length : 0,
+    dailyLabels,
+    dailyData,
+    hasDailyData,
+    regularDataExists: dailyData && dailyData.regular,
+    decafDataExists: dailyData && dailyData.decaf,
+    regularLength:
+        dailyData && dailyData.regular ? dailyData.regular.length : 0,
+    decafLength: dailyData && dailyData.decaf ? dailyData.decaf.length : 0,
 });
 ---
 
 <Layout title="Espresso Shot Analytics">
-  <main>
-    <h1>Espresso Shot Analytics</h1>
-    <p class="build-time">Last updated: {buildTime}</p>
+    <main>
+        <h1>Espresso Shot Analytics</h1>
+        <p class="build-time">Last updated: {buildTime}</p>
 
-    {
-      errorMessage && (
-        <div class="error-message">
-          <h2>Configuration Error</h2>
-          <p>{errorMessage}</p>
-          <p>Please bug Patrick about fixing this</p>
-        </div>
-      )
-    }
+        {
+            errorMessage && (
+                <div class="error-message">
+                    <h2>Configuration Error</h2>
+                    <p>{errorMessage}</p>
+                    <p>Please bug Patrick about fixing this</p>
+                </div>
+            )
+        }
 
-    <div class="chart-section">
-      {
-        hasData ? (
-          <Chart
-            id="monthly-shots-chart"
-            title="Monthly Espresso Shots"
-            data={data}
-            labels={labels}
-            chartType="bar"
-          />
-        ) : (
-          <div class="no-data">
-            <h2>No Monthly Shot Data Available</h2>
-            <p>
-              {errorMessage
-                ? "Please fix the configuration error above."
-                : "Make sure your Airtable credentials are correct and your table contains records with a date/time field."}
-            </p>
-          </div>
-        )
-      }
-    </div>
-
-    <div class="chart-section">
-      {
-        hasDailyData ? (
-          <Chart
-            id="daily-shots-chart"
-            title={
-              hasCoffeeTypeData
-                ? "Daily Espresso Shots by Type (Last 60 Days)"
-                : "Daily Espresso Shots (Last 60 Days)"
+        <div class="chart-section">
+            {
+                hasData ? (
+                    <>
+                        <Chart
+                            id="monthly-shots-chart"
+                            title="Monthly Espresso Shots"
+                            data={data}
+                            labels={labels}
+                            chartType="bar"
+                        />
+                        <div class="month-rankings">
+                            <div class="ranking-section">
+                                <h3>Top 3 Months</h3>
+                                <ul>
+                                    {topThree.map((item, index) => (
+                                        <li key={index}>
+                                            <span class="rank">
+                                                #{index + 1}
+                                            </span>
+                                            <span class="month">
+                                                {item.month}
+                                            </span>
+                                            <span class="count">
+                                                {item.count} shots
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <div class="no-data">
+                        <h2>No Monthly Shot Data Available</h2>
+                        <p>
+                            {errorMessage
+                                ? "Please fix the configuration error above."
+                                : "Make sure your Airtable credentials are correct and your table contains records with a date/time field."}
+                        </p>
+                    </div>
+                )
             }
-            data={dailyData}
-            labels={dailyLabels}
-            chartType="bar"
-          />
-        ) : (
-          <div class="no-data">
-            <h2>No Daily Shot Data Available</h2>
-            <p>No recent shots found within the last 60 days.</p>
-          </div>
-        )
-      }
-    </div>
-
-    {
-      debugInfo.recordCount > 0 && !hasData && (
-        <div class="debug-info">
-          <h3>Debug Information</h3>
-          <p>Records found: {debugInfo.recordCount}</p>
-          <p>Available fields: {debugInfo.availableFields.join(", ")}</p>
-          <p>Date field found: {debugInfo.hasStartTime ? "Yes" : "No"}</p>
-          {debugInfo.startTimeFieldName && (
-            <p>Using field: {debugInfo.startTimeFieldName}</p>
-          )}
-          {debugInfo.dateExample && (
-            <p>Example date value: {debugInfo.dateExample}</p>
-          )}
         </div>
-      )
-    }
-  </main>
+
+        <div class="chart-section">
+            {
+                hasDailyData ? (
+                    <Chart
+                        id="daily-shots-chart"
+                        title={
+                            hasCoffeeTypeData
+                                ? "Daily Espresso Shots by Type (Last 60 Days)"
+                                : "Daily Espresso Shots (Last 60 Days)"
+                        }
+                        data={dailyData}
+                        labels={dailyLabels}
+                        chartType="bar"
+                    />
+                ) : (
+                    <div class="no-data">
+                        <h2>No Daily Shot Data Available</h2>
+                        <p>No recent shots found within the last 60 days.</p>
+                    </div>
+                )
+            }
+        </div>
+
+        {
+            debugInfo.recordCount > 0 && !hasData && (
+                <div class="debug-info">
+                    <h3>Debug Information</h3>
+                    <p>Records found: {debugInfo.recordCount}</p>
+                    <p>
+                        Available fields: {debugInfo.availableFields.join(", ")}
+                    </p>
+                    <p>
+                        Date field found:{" "}
+                        {debugInfo.hasStartTime ? "Yes" : "No"}
+                    </p>
+                    {debugInfo.startTimeFieldName && (
+                        <p>Using field: {debugInfo.startTimeFieldName}</p>
+                    )}
+                    {debugInfo.dateExample && (
+                        <p>Example date value: {debugInfo.dateExample}</p>
+                    )}
+                </div>
+            )
+        }
+    </main>
 </Layout>
 
 <style>
-  main {
-    margin: auto;
-    padding: 1.5rem;
-    max-width: 1200px;
-    font-family: var(--font-primary);
-    background-color: var(--background);
-    color: var(--text-primary);
-  }
-
-  h1 {
-    text-align: center;
-    margin-bottom: 0.5rem;
-    font-family: var(--font-primary);
-    color: var(--text-primary);
-  }
-
-  .build-time {
-    text-align: center;
-    margin-bottom: 2rem;
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-  }
-
-  .chart-section {
-    margin-bottom: 4rem; /* Increased margin between charts */
-    padding: 1.5rem 1.5rem 2.5rem 1.5rem; /* More padding at the bottom */
-    background-color: var(--background-secondary);
-    border-radius: 6px;
-    transition: background-color 0.3s ease;
-    box-sizing: border-box; /* Make sure padding is included in height calculation */
-  }
-
-  .error-message {
-    background-color: var(--error-color);
-    color: var(--background);
-    border-left: 4px solid var(--base08);
-    padding: 1rem;
-    margin-bottom: 2rem;
-    border-radius: 4px;
-    font-family: var(--font-primary);
-  }
-
-  .error-message h2 {
-    color: var(--background);
-  }
-
-  .no-data {
-    padding: 2rem;
-    text-align: center;
-    margin-bottom: 2rem;
-    font-family: var(--font-primary);
-    border: 1px dashed var(--border-color);
-    color: var(--text-secondary);
-  }
-
-  .no-data h2 {
-    color: var(--text-primary);
-  }
-
-  .debug-info {
-    text-align: left;
-    padding: 1rem;
-    margin-top: 1rem;
-    border-radius: 4px;
-    font-family: var(--font-primary);
-    border: 1px dashed var(--border-color);
-    color: var(--text-secondary);
-    background-color: var(--background-secondary);
-  }
-
-  .debug-info h3 {
-    color: var(--text-primary);
-  }
-
-  /* Added specific width to maintain proper layout */
-  @media (min-width: 800px) {
-    .chart-section {
-      min-height: 550px; /* Ensure consistent height */
+    main {
+        margin: auto;
+        padding: var(--page_gutters);
+        max-width: var(--page-max);
+        font-family: var(--font-primary);
+        background-color: var(--color-bg);
+        color: var(--color-text);
     }
-  }
+
+    h1 {
+        text-align: center;
+        margin-bottom: var(--space_xs);
+        font-family: var(--font-primary);
+        color: var(--color-text);
+    }
+
+    .build-time {
+        text-align: center;
+        margin-bottom: var(--space_l);
+        font-size: 0.9rem;
+        color: var(--base_04);
+    }
+
+    .chart-section {
+        margin-bottom: var(--space_2xl);
+        padding: var(--space_m);
+        background:
+            radial-gradient(var(--base_06) 0.5px, transparent 1px) 0 0 / 3px 3px,
+            transparent;
+        box-shadow: 2px 2px var(--base_04);
+        border: 1px solid var(--base_01);
+        border-radius: 0;
+        box-sizing: border-box;
+    }
+
+    .error-message {
+        background-color: color-mix(
+            in oklab,
+            var(--base_08) 20%,
+            var(--base_07)
+        );
+        color: var(--base_01);
+        border-left: 4px solid var(--base_08);
+        padding: var(--space_s);
+        margin-bottom: var(--space_l);
+        border-radius: 0;
+        font-family: var(--font-primary);
+    }
+
+    .error-message h2 {
+        color: var(--base_01);
+    }
+
+    .no-data {
+        padding: var(--space_l);
+        text-align: center;
+        margin-bottom: var(--space_l);
+        font-family: var(--font-primary);
+        border: 0.1rem solid var(--base_04);
+        color: var(--base_04);
+        background: var(--base_06);
+        box-shadow: 2px 2px var(--base_04);
+    }
+
+    .no-data h2 {
+        color: var(--color-text);
+    }
+
+    .debug-info {
+        text-align: left;
+        padding: var(--space_s);
+        margin-top: var(--space_s);
+        border-radius: 0;
+        font-family: var(--font-primary);
+        border: 0.1rem solid var(--base_04);
+        color: var(--base_04);
+        background-color: var(--base_06);
+        box-shadow: 2px 2px var(--base_04);
+    }
+
+    .debug-info h3 {
+        color: var(--color-text);
+    }
+
+    /* Added specific width to maintain proper layout */
+    .month-rankings {
+        display: flex;
+        justify-content: space-around;
+        margin-top: var(--space_l);
+        gap: var(--space_l);
+        flex-wrap: wrap;
+    }
+
+    .ranking-section {
+        flex: 1;
+        min-width: 250px;
+    }
+
+    .ranking-section h3 {
+        text-align: center;
+        margin-bottom: var(--space_s);
+        color: var(--color-text);
+        font-size: 1.1rem;
+    }
+
+    .ranking-section ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .ranking-section li {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: var(--space_xs) var(--space_s);
+        margin-bottom: var(--space_2xs);
+        background-color: var(--base_07);
+        border-radius: 0;
+        border: 2px solid var(--base_05);
+        border-left: 4px solid var(--accent);
+        box-shadow: 2px 2px var(--base_04);
+    }
+
+    .rank {
+        font-weight: bold;
+        color: var(--accent);
+        min-width: 2rem;
+    }
+
+    .month {
+        flex: 1;
+        text-align: center;
+        font-weight: 500;
+        color: var(--color-text);
+    }
+
+    .count {
+        font-weight: bold;
+        color: var(--base_04);
+        font-size: 0.9rem;
+    }
+
+    @media (min-width: 800px) {
+        .chart-section {
+            padding: var(--space_l);
+        }
+    }
+
+    @media (max-width: 600px) {
+        .month-rankings {
+            flex-direction: column;
+            gap: var(--space_m);
+        }
+
+        .ranking-section {
+            min-width: unset;
+        }
+    }
 </style>

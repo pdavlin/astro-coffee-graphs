@@ -1,313 +1,415 @@
 ---
 // Chart.astro
 export interface Props {
-  id: string;
-  title: string;
-  data: any[] | { regular: number[], decaf: number[] };
-  labels: string[];
-  chartType?: 'line' | 'bar' | 'pie';
+    id: string;
+    title: string;
+    data: any[] | { regular: number[]; decaf: number[] };
+    labels: string[];
+    chartType?: "line" | "bar" | "pie";
 }
 
-const { id, title, data, labels, chartType = 'bar' } = Astro.props;
-const isStackedBar = id === 'daily-shots-chart';
+const { id, title, data, labels, chartType = "bar" } = Astro.props;
+const isStackedBar = id === "daily-shots-chart";
 ---
 
 <div class="chart-container">
-  <h2>{title}</h2>
-  <canvas id={id}></canvas>
+    <h2>{title}</h2>
+    <canvas id={id}></canvas>
 </div>
 
 <!-- Load Chart.js from CDN -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script define:vars={{ id, title, data, labels, chartType, isStackedBar }}>
-  // Function to get CSS variable value
-  function getCssVar(name) {
-    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  }
-  
-  // Convert HSL to RGBA
-  function hslToRgba(hslStr, alpha = 1) {
-    // Parse HSL values
-    const hslRegex = /hsl\(\s*(\d+)\s*,\s*(\d+)%\s*,\s*(\d+)%\s*\)/;
-    const match = hslStr.match(hslRegex);
-    
-    if (!match) return hslStr; // Return original if not HSL format
-    
-    const h = parseInt(match[1]) / 360;
-    const s = parseInt(match[2]) / 100;
-    const l = parseInt(match[3]) / 100;
-    
-    let r, g, b;
-    
-    if (s === 0) {
-      r = g = b = l;
-    } else {
-      const hue2rgb = (p, q, t) => {
-        if (t < 0) t += 1;
-        if (t > 1) t -= 1;
-        if (t < 1/6) return p + (q - p) * 6 * t;
-        if (t < 1/2) return q;
-        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-        return p;
-      };
-      
-      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-      const p = 2 * l - q;
-      
-      r = hue2rgb(p, q, h + 1/3);
-      g = hue2rgb(p, q, h);
-      b = hue2rgb(p, q, h - 1/3);
-    }
-    
-    return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${alpha})`;
-  }
-  
-  // Wait for everything to load
-  document.addEventListener('DOMContentLoaded', () => {
-    const ctx = document.getElementById(id);
-    
-    if (!ctx) {
-      console.error(`Canvas element with id ${id} not found!`);
-      return;
-    }
-    
-    if (isStackedBar) {
-      console.log(`Initializing stacked bar chart ${id} with ${labels.length} labels`);
-      console.log('Stacked Bar Data:', {
-        hasRegularData: data && data.regular,
-        hasDecafData: data && data.decaf,
-        regularLength: data && data.regular ? data.regular.length : 0,
-        decafLength: data && data.decaf ? data.decaf.length : 0,
-        dataType: typeof data,
-        isArray: Array.isArray(data)
-      });
-    } else {
-      console.log(`Initializing chart ${id} with ${labels.length} labels and ${data.length} data points`);
+    // Function to get CSS variable value
+    function getCssVar(name) {
+        return getComputedStyle(document.documentElement)
+            .getPropertyValue(name)
+            .trim();
     }
 
-    // Set up theme-aware colors
-    const setupChart = () => {
-      try {
-        // Get theme colors - using direct HSL values for better compatibility
-        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        const fontFamily = "'CustomFont', 'Courier New', Courier, monospace";
-        
-        // Choose colors based on theme
-        const primaryColorHsl = isDark ? 'hsl(210, 40%, 52%)' : 'hsl(240, 45%, 62%)';
-        const secondaryColorHsl = isDark ? 'hsl(30, 50%, 60%)' : 'hsl(30, 70%, 60%)';
-        const textColorHsl = isDark ? 'hsl(0, 25%, 94%)' : 'hsl(0, 7%, 10%)';
-        const backgroundHsl = isDark ? 'hsl(0, 6%, 15%)' : 'hsl(0, 15%, 89%)';
-        
-        // Convert to RGBA for transparency
-        const primaryColor = primaryColorHsl;
-        const primaryColorAlpha = hslToRgba(primaryColorHsl, 0.7);
-        const secondaryColor = secondaryColorHsl;
-        const secondaryColorAlpha = hslToRgba(secondaryColorHsl, 0.7);
-        const textColor = textColorHsl;
-        const backgroundColor = hslToRgba(backgroundHsl, 0.7);
-        
-        console.log(`Chart colors: primary=${primaryColor}, text=${textColor}`);
-        
-        // Create new chart
-        if (window[`chart_${id}`]) {
-          window[`chart_${id}`].destroy();
-        }
-        
-        // Set up datasets based on chart type
-        let datasets;
-        if (isStackedBar && data && typeof data === 'object' && !Array.isArray(data)) {
-          // Check if we have regular and decaf data available
-          const hasRegularData = data.regular && Array.isArray(data.regular);
-          const hasDecafData = data.decaf && Array.isArray(data.decaf);
-          
-          // Prepare datasets based on available data
-          datasets = [];
-          
-          if (hasRegularData) {
-            datasets.push({
-              label: 'Regular Coffee',
-              data: data.regular,
-              backgroundColor: primaryColorAlpha,
-              borderColor: primaryColor,
-              borderWidth: 1
-            });
-          }
-          
-          if (hasDecafData) {
-            datasets.push({
-              label: 'Decaf Coffee',
-              data: data.decaf,
-              backgroundColor: secondaryColorAlpha,
-              borderColor: secondaryColor,
-              borderWidth: 1
-            });
-          }
-          
-          // If neither regular nor decaf data exists, fallback to a single dataset
-          if (datasets.length === 0) {
-            datasets = [{
-              label: 'Total Shots',
-              data: Array(labels.length).fill(0),
-              backgroundColor: primaryColorAlpha,
-              borderColor: primaryColor,
-              borderWidth: 1
-            }];
-          }
+    // Convert HSL to RGBA
+    function hslToRgba(hslStr, alpha = 1) {
+        // Parse HSL values
+        const hslRegex = /hsl\(\s*(\d+)\s*,\s*(\d+)%\s*,\s*(\d+)%\s*\)/;
+        const match = hslStr.match(hslRegex);
+
+        if (!match) return hslStr; // Return original if not HSL format
+
+        const h = parseInt(match[1]) / 360;
+        const s = parseInt(match[2]) / 100;
+        const l = parseInt(match[3]) / 100;
+
+        let r, g, b;
+
+        if (s === 0) {
+            r = g = b = l;
         } else {
-          // Handle case where data is an array (for the monthly chart)
-          const dataArray = Array.isArray(data) ? data : Array(labels.length).fill(0);
-          datasets = [{
-            label: 'Total Shots',
-            data: dataArray,
-            backgroundColor: primaryColorAlpha,
-            borderColor: primaryColor,
-            borderWidth: 1,
-            tension: 0.3 // Makes line charts smoother
-          }];
+            const hue2rgb = (p, q, t) => {
+                if (t < 0) t += 1;
+                if (t > 1) t -= 1;
+                if (t < 1 / 6) return p + (q - p) * 6 * t;
+                if (t < 1 / 2) return q;
+                if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+                return p;
+            };
+
+            const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+            const p = 2 * l - q;
+
+            r = hue2rgb(p, q, h + 1 / 3);
+            g = hue2rgb(p, q, h);
+            b = hue2rgb(p, q, h - 1 / 3);
         }
-        
-        window[`chart_${id}`] = new Chart(ctx, {
-          type: chartType,
-          data: {
-            labels: labels,
-            datasets: datasets
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            layout: {
-              padding: {
-                bottom: 25 // Add padding at the bottom for labels
-              }
-            },
-            scales: {
-              y: {
-                beginAtZero: true,
-                stacked: isStackedBar,
-                title: {
-                  display: true,
-                  text: 'Number of Shots',
-                  color: textColor,
-                  font: {
-                    family: fontFamily
-                  }
-                },
-                ticks: {
-                  precision: 0,
-                  color: textColor,
-                  font: {
-                    family: fontFamily
-                  }
-                },
-                grid: {
-                  display: false
-                }
-              },
-              x: {
-                stacked: isStackedBar,
-                title: {
-                  display: true,
-                  text: chartType === 'line' ? 'Date' : (id === 'daily-shots-chart' ? 'Date' : 'Month'),
-                  color: textColor,
-                  font: {
-                    family: fontFamily
-                  },
-                  padding: {
-                    top: 10 // Space above the title
-                  }
-                },
-                ticks: {
-                  color: textColor,
-                  font: {
-                    family: fontFamily
-                  }
-                },
-                grid: {
-                  display: false
-                }
-              }
-            },
-            plugins: {
-              legend: {
-                labels: {
-                  color: textColor,
-                  font: {
-                    family: fontFamily
-                  },
-                  padding: 10
-                },
-                position: 'top',
-                display: isStackedBar ? true : true,
-              },
-              tooltip: {
-                backgroundColor: backgroundColor,
-                titleColor: textColor,
-                bodyColor: textColor,
-                borderWidth: 1,
-                titleFont: {
-                  family: fontFamily
-                },
-                bodyFont: {
-                  family: fontFamily
-                },
-                callbacks: {
-                  title: function(tooltipItems) {
-                    return tooltipItems[0].label;
-                  },
-                  label: function(context) {
-                    return `${context.dataset.label}: ${context.parsed.y} shots`;
-                  }
-                }
-              }
+
+        return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${alpha})`;
+    }
+
+    // Convert hex to RGBA
+    function hexToRgba(hex, alpha = 1) {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        if (!result) return hex;
+
+        const r = parseInt(result[1], 16);
+        const g = parseInt(result[2], 16);
+        const b = parseInt(result[3], 16);
+
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    // Get accent color variations
+    function getAccentColors() {
+        // Simply use all the accent colors in order
+        const allColors = [
+            "#ca4949", // Red
+            "#b45a3c", // Orange
+            "#a06e3b", // Yellow
+            "#4b8b8b", // Green
+            "#5485b6", // Cyan
+            "#7272ca", // Blue
+            "#8464c4", // Purple
+            "#bd5187", // Magenta
+        ];
+
+        // Get the day-based index
+        const date = new Date().getDate() % 8;
+        const primaryIndex = date;
+        const primary = allColors[primaryIndex];
+
+        // Use complementary colors (offset by 4 for better contrast)
+        // This creates these pairings:
+        // Red (#ca4949) ↔ Cyan (#5485b6)
+        // Orange (#b45a3c) ↔ Blue (#7272ca)
+        // Yellow (#a06e3b) ↔ Purple (#8464c4)
+        // Green (#4b8b8b) ↔ Magenta (#bd5187)
+        const secondary = allColors[(primaryIndex + 4) % 8];
+
+        // Create palette starting from today's color
+        const palette = [];
+        for (let i = 0; i < allColors.length; i++) {
+            palette.push(allColors[(primaryIndex + i) % allColors.length]);
+        }
+
+        return { primary, secondary, palette };
+    }
+
+    // Wait for everything to load
+    document.addEventListener("DOMContentLoaded", () => {
+        // Small delay to ensure accent color is set
+        setTimeout(() => {
+            const ctx = document.getElementById(id);
+
+            if (!ctx) {
+                console.error(`Canvas element with id ${id} not found!`);
+                return;
             }
-          }
-        });
-        
-        console.log('Chart successfully initialized');
-      } catch (error) {
-        console.error('Error creating chart:', error);
-        console.error(error.stack);
-      }
-    };
-    
-    // Initialize chart
-    setupChart();
-    
-    // Re-render chart on theme change
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.attributeName === 'data-theme') {
-          console.log('Theme changed, updating chart');
-          setupChart();
-        }
-      });
+
+            if (isStackedBar) {
+                console.log(
+                    `Initializing stacked bar chart ${id} with ${labels.length} labels`,
+                );
+                console.log("Stacked Bar Data:", {
+                    hasRegularData: data && data.regular,
+                    hasDecafData: data && data.decaf,
+                    regularLength:
+                        data && data.regular ? data.regular.length : 0,
+                    decafLength: data && data.decaf ? data.decaf.length : 0,
+                    dataType: typeof data,
+                    isArray: Array.isArray(data),
+                });
+            } else {
+                console.log(
+                    `Initializing chart ${id} with ${labels.length} labels and ${data.length} data points`,
+                );
+            }
+
+            // Set up theme-aware colors
+            const setupChart = () => {
+                try {
+                    // Get theme colors - using direct HSL values for better compatibility
+                    const isDark =
+                        document.documentElement.getAttribute(
+                            "data-appearance",
+                        ) === "dark" ||
+                        document.documentElement.getAttribute("data-theme") ===
+                            "dark";
+                    const fontFamily =
+                        "'BerkeleyMono', 'Courier New', Courier, monospace";
+
+                    // Get dynamic accent colors
+                    const accentColors = getAccentColors();
+                    console.log("Accent colors:", accentColors);
+
+                    // Choose colors based on theme and accent
+                    const primaryColorHsl = accentColors.primary;
+                    const secondaryColorHsl = accentColors.secondary;
+                    const textColorHsl = isDark
+                        ? "hsl(0, 25%, 94%)"
+                        : "hsl(0, 7%, 10%)";
+                    const backgroundHsl = isDark
+                        ? "hsl(0, 6%, 15%)"
+                        : "hsl(0, 15%, 89%)";
+
+                    // Convert to RGBA for transparency
+                    const primaryColor = primaryColorHsl;
+                    const primaryColorAlpha = hexToRgba(primaryColorHsl, 0.8);
+                    const secondaryColor = secondaryColorHsl;
+                    const secondaryColorAlpha = hexToRgba(
+                        secondaryColorHsl,
+                        0.8,
+                    );
+                    const textColor = textColorHsl;
+                    const backgroundColor = hslToRgba(backgroundHsl, 0.7);
+
+                    console.log(
+                        `Chart colors: primary=${primaryColor}, secondary=${secondaryColor}, text=${textColor}`,
+                    );
+                    console.log(`Chart palette:`, accentColors.palette);
+
+                    // Create new chart
+                    if (window[`chart_${id}`]) {
+                        window[`chart_${id}`].destroy();
+                    }
+
+                    // Set up datasets based on chart type
+                    let datasets;
+                    if (
+                        isStackedBar &&
+                        data &&
+                        typeof data === "object" &&
+                        !Array.isArray(data)
+                    ) {
+                        // Check if we have regular and decaf data available
+                        const hasRegularData =
+                            data.regular && Array.isArray(data.regular);
+                        const hasDecafData =
+                            data.decaf && Array.isArray(data.decaf);
+
+                        // Prepare datasets based on available data
+                        datasets = [];
+
+                        if (hasRegularData) {
+                            datasets.push({
+                                label: "Regular Coffee",
+                                data: data.regular,
+                                backgroundColor: primaryColorAlpha,
+                                borderColor: primaryColor,
+                                borderWidth: 1,
+                            });
+                        }
+
+                        if (hasDecafData) {
+                            datasets.push({
+                                label: "Decaf Coffee",
+                                data: data.decaf,
+                                backgroundColor: secondaryColorAlpha,
+                                borderColor: secondaryColor,
+                                borderWidth: 1,
+                            });
+                        }
+
+                        // If neither regular nor decaf data exists, fallback to a single dataset
+                        if (datasets.length === 0) {
+                            datasets = [
+                                {
+                                    label: "Total Shots",
+                                    data: Array(labels.length).fill(0),
+                                    backgroundColor: primaryColorAlpha,
+                                    borderColor: primaryColor,
+                                    borderWidth: 1,
+                                },
+                            ];
+                        }
+                    } else {
+                        // Handle case where data is an array (for the monthly chart)
+                        const dataArray = Array.isArray(data)
+                            ? data
+                            : Array(labels.length).fill(0);
+
+                        // Use single accent color for all bars
+                        datasets = [
+                            {
+                                label: "Total Shots",
+                                data: dataArray,
+                                backgroundColor: primaryColorAlpha,
+                                borderColor: primaryColor,
+                                borderWidth: 1,
+                                tension: 0.3, // Makes line charts smoother
+                            },
+                        ];
+                    }
+
+                    window[`chart_${id}`] = new Chart(ctx, {
+                        type: chartType,
+                        data: {
+                            labels: labels,
+                            datasets: datasets,
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            layout: {
+                                padding: {
+                                    bottom: 25, // Add padding at the bottom for labels
+                                },
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    stacked: isStackedBar,
+                                    title: {
+                                        display: true,
+                                        text: "Number of Shots",
+                                        color: textColor,
+                                        font: {
+                                            family: fontFamily,
+                                        },
+                                    },
+                                    ticks: {
+                                        precision: 0,
+                                        color: textColor,
+                                        font: {
+                                            family: fontFamily,
+                                        },
+                                    },
+                                    grid: {
+                                        display: false,
+                                    },
+                                },
+                                x: {
+                                    stacked: isStackedBar,
+                                    title: {
+                                        display: true,
+                                        text:
+                                            chartType === "line"
+                                                ? "Date"
+                                                : id === "daily-shots-chart"
+                                                  ? "Date"
+                                                  : "Month",
+                                        color: textColor,
+                                        font: {
+                                            family: fontFamily,
+                                        },
+                                        padding: {
+                                            top: 10, // Space above the title
+                                        },
+                                    },
+                                    ticks: {
+                                        color: textColor,
+                                        font: {
+                                            family: fontFamily,
+                                        },
+                                    },
+                                    grid: {
+                                        display: false,
+                                    },
+                                },
+                            },
+                            plugins: {
+                                legend: {
+                                    labels: {
+                                        color: textColor,
+                                        font: {
+                                            family: fontFamily,
+                                        },
+                                        padding: 10,
+                                    },
+                                    position: "top",
+                                    display: isStackedBar ? true : true,
+                                },
+                                tooltip: {
+                                    backgroundColor: backgroundColor,
+                                    titleColor: textColor,
+                                    bodyColor: textColor,
+                                    borderWidth: 1,
+                                    titleFont: {
+                                        family: fontFamily,
+                                    },
+                                    bodyFont: {
+                                        family: fontFamily,
+                                    },
+                                    callbacks: {
+                                        title: function (tooltipItems) {
+                                            return tooltipItems[0].label;
+                                        },
+                                        label: function (context) {
+                                            return `${context.dataset.label}: ${context.parsed.y} shots`;
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    });
+
+                    console.log("Chart successfully initialized");
+                } catch (error) {
+                    console.error("Error creating chart:", error);
+                    console.error(error.stack);
+                }
+            };
+
+            // Initialize chart
+            setupChart();
+
+            // Re-render chart on theme change
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (
+                        mutation.attributeName === "data-theme" ||
+                        mutation.attributeName === "data-appearance" ||
+                        mutation.attributeName === "style"
+                    ) {
+                        console.log("Theme or accent changed, updating chart");
+                        setupChart();
+                    }
+                });
+            });
+
+            // Start observing theme changes
+            observer.observe(document.documentElement, {
+                attributes: true,
+                attributeFilter: ["data-theme", "data-appearance", "style"],
+            });
+        }, 100); // End of setTimeout
     });
-    
-    // Start observing theme changes
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['data-theme']
-    });
-  });
 </script>
 
 <style>
-  .chart-container {
-    width: 100%;
-    max-width: 800px;
-    height: 475px; /* Increased height for label space */
-    margin: 0 auto;
-    padding: 1rem 0;
-    background-color: transparent;
-    font-family: var(--font-primary);
-    color: var(--text-primary);
-  }
+    .chart-container {
+        width: 100%;
+        max-width: 800px;
+        height: 475px; /* Increased height for label space */
+        margin: 0 auto;
+        padding: var(--space_s) 0;
+        background-color: transparent;
+        font-family: var(--font-primary);
+        color: var(--color-text);
+    }
 
-  h2 {
-    text-align: center;
-    margin-bottom: 1rem;
-    color: var(--text-primary);
-    font-family: var(--font-primary);
-  }
+    h2 {
+        text-align: center;
+        margin-bottom: var(--space_s);
+        color: var(--color-text);
+        font-family: var(--font-primary);
+    }
 </style>
