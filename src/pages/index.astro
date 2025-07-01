@@ -482,10 +482,111 @@ function processDailyData(records) {
     };
 }
 
+// Process data for time of day chart (hourly buckets)
+function processTimeOfDayData(records) {
+    // Handle empty records
+    if (!records || records.length === 0) {
+        console.log("No records to process for time of day");
+        return {
+            labels: [],
+            data: [],
+        };
+    }
+
+    // Find the date field if "Start time" doesn't exist
+    let dateField = "Start time";
+    if (records[0] && !records[0][dateField]) {
+        // Look for alternative date fields
+        const possibleFields = Object.keys(records[0]).filter(
+            (field) =>
+                field.toLowerCase().includes("date") ||
+                field.toLowerCase().includes("time"),
+        );
+
+        if (possibleFields.length > 0) {
+            dateField = possibleFields[0];
+            console.log(
+                `Using "${dateField}" as the date field for time of day analysis`,
+            );
+        } else {
+            console.log("No date/time field found in records");
+            return { labels: [], data: [] };
+        }
+    }
+
+    // Initialize hourly buckets (24 hours)
+    const hourlyBuckets = new Array(24).fill(0);
+    let validRecords = 0;
+
+    records.forEach((record) => {
+        // Skip records without a date field
+        if (!record[dateField]) return;
+
+        try {
+            // Parse the date string to get the hour
+            // The date string is expected to be in ISO format (e.g., "2024-01-15T14:30:00.000Z")
+            const dateStr = record[dateField];
+            if (!dateStr) return;
+
+            // Convert UTC to Central Time
+            // Use -6 for CST (winter) or -5 for CDT (summer)
+            // Since you mentioned both CST and MDT, and want consistent bucketing,
+            // we'll use a fixed -6 offset (CST) for all times
+            const date = new Date(dateStr);
+
+            // Apply Central Time offset (-6 hours from UTC)
+            const centralTimeHour = (date.getUTCHours() - 6 + 24) % 24;
+
+            if (centralTimeHour >= 0 && centralTimeHour < 24) {
+                hourlyBuckets[centralTimeHour]++;
+                validRecords++;
+            }
+        } catch (error) {
+            console.log(`Error processing time for record:`, error);
+        }
+    });
+
+    console.log(`Processed ${validRecords} valid records for time of day`);
+
+    // Create labels and data arrays
+    const labels = [];
+    const fullLabels = [];
+    const data = [];
+
+    for (let hour = 0; hour < 24; hour++) {
+        // Format hour labels
+        const startHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+        const endHour =
+            hour + 1 === 12
+                ? 12
+                : hour + 1 > 12
+                  ? hour + 1 - 12
+                  : hour + 1 === 0
+                    ? 12
+                    : hour + 1;
+        const startPeriod = hour < 12 ? "am" : "pm";
+        const endPeriod = hour + 1 < 12 || hour + 1 === 24 ? "am" : "pm";
+
+        // Simple label for x-axis (e.g., "6am")
+        labels.push(`${startHour}${startPeriod}`);
+        // Full label for tooltips (e.g., "6am-7am")
+        fullLabels.push(`${startHour}${startPeriod}-${endHour}${endPeriod}`);
+        data.push(hourlyBuckets[hour]);
+    }
+
+    return { labels, fullLabels, data };
+}
+
 const { labels, data } = processMonthlyData(records);
 const { labels: dailyLabels, data: dailyData } = processDailyData(records);
+const {
+    labels: timeLabels,
+    fullLabels: timeFullLabels,
+    data: timeData,
+} = processTimeOfDayData(records);
 const hasData = labels.length > 0;
 const hasDailyData = dailyLabels.length > 0;
+const hasTimeData = timeLabels.length > 0;
 
 // Calculate top and bottom three months
 function getTopMonths(labels, data) {
@@ -592,6 +693,30 @@ console.log("Daily chart data:", {
                             {errorMessage
                                 ? "Please fix the configuration error above."
                                 : "Make sure your Airtable credentials are correct and your table contains records with a date/time field."}
+                        </p>
+                    </div>
+                )
+            }
+        </div>
+
+        <div class="chart-section">
+            {
+                hasTimeData ? (
+                    <Chart
+                        id="time-of-day-chart"
+                        title="Espresso Shots by Time of Day"
+                        data={timeData}
+                        labels={timeLabels}
+                        fullLabels={timeFullLabels}
+                        chartType="bar"
+                        xAxisLabel="Time of Day"
+                    />
+                ) : (
+                    <div class="no-data">
+                        <h2>No Time of Day Data Available</h2>
+                        <p>
+                            Unable to extract time information from shot
+                            records.
                         </p>
                     </div>
                 )

@@ -5,10 +5,20 @@ export interface Props {
     title: string;
     data: any[] | { regular: number[]; decaf: number[] };
     labels: string[];
+    fullLabels?: string[];
     chartType?: "line" | "bar" | "pie";
+    xAxisLabel?: string;
 }
 
-const { id, title, data, labels, chartType = "bar" } = Astro.props;
+const {
+    id,
+    title,
+    data,
+    labels,
+    fullLabels,
+    chartType = "bar",
+    xAxisLabel,
+} = Astro.props;
 const isStackedBar = id === "daily-shots-chart";
 ---
 
@@ -20,7 +30,18 @@ const isStackedBar = id === "daily-shots-chart";
 <!-- Load Chart.js from CDN -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<script define:vars={{ id, title, data, labels, chartType, isStackedBar }}>
+<script
+    define:vars={{
+        id,
+        title,
+        data,
+        labels,
+        fullLabels,
+        chartType,
+        isStackedBar,
+        xAxisLabel,
+    }}
+>
     // Function to get CSS variable value
     function getCssVar(name) {
         return getComputedStyle(document.documentElement)
@@ -301,11 +322,12 @@ const isStackedBar = id === "daily-shots-chart";
                                     title: {
                                         display: true,
                                         text:
-                                            chartType === "line"
+                                            xAxisLabel ||
+                                            (chartType === "line"
                                                 ? "Date"
                                                 : id === "daily-shots-chart"
                                                   ? "Date"
-                                                  : "Month",
+                                                  : "Month"),
                                         color: textColor,
                                         font: {
                                             family: fontFamily,
@@ -350,6 +372,15 @@ const isStackedBar = id === "daily-shots-chart";
                                     },
                                     callbacks: {
                                         title: function (tooltipItems) {
+                                            // Use fullLabels for tooltip if available
+                                            if (
+                                                fullLabels &&
+                                                fullLabels.length > 0
+                                            ) {
+                                                return fullLabels[
+                                                    tooltipItems[0].dataIndex
+                                                ];
+                                            }
                                             return tooltipItems[0].label;
                                         },
                                         label: function (context) {
