@@ -65,8 +65,48 @@ try {
     console.error("Error in page component:", e);
 }
 
+// Helper function to filter out Matt McCrary's shots
+function filterRecords(records) {
+    if (!records || records.length === 0) return records;
+
+    // Log first record to see available fields
+    if (records.length > 0) {
+        console.log("Sample record fields:", Object.keys(records[0]));
+        console.log("Looking for barista field...");
+    }
+
+    const beforeCount = records.length;
+    const filtered = records.filter((record) => {
+        // Check various possible barista field names
+        const barista =
+            record["Barista"] ||
+            record["barista"] ||
+            record["Made by"] ||
+            record["made by"] ||
+            "";
+        const baristaStr = String(barista).toLowerCase();
+
+        // Exclude if it's Matt McCrary
+        const shouldExclude =
+            baristaStr.includes("matt mccrary") ||
+            baristaStr.includes("mccrary");
+
+        return !shouldExclude;
+    });
+
+    const afterCount = filtered.length;
+    console.log(
+        `Filtered out ${beforeCount - afterCount} Matt McCrary shots (${beforeCount} → ${afterCount})`,
+    );
+
+    return filtered;
+}
+
 // Process data for the monthly espresso shots chart
 function processMonthlyData(records) {
+    // Filter out Matt McCrary's shots
+    records = filterRecords(records);
+
     // Handle empty records
     if (!records || records.length === 0) {
         console.log("No records to process");
@@ -110,11 +150,6 @@ function processMonthlyData(records) {
             const dateStr = record[dateField];
             if (!dateStr) {
                 console.log(`Invalid date: ${record[dateField]}`);
-                return;
-            }
-
-            // Skip December 2023 - direct string check
-            if (dateStr.startsWith("2023-12")) {
                 return;
             }
 
@@ -198,6 +233,9 @@ function processMonthlyData(records) {
 
 // Process data for the daily shots (last 60 days)
 function processDailyData(records) {
+    // Filter out Matt McCrary's shots
+    records = filterRecords(records);
+
     // Handle empty records
     if (!records || records.length === 0) {
         console.log("No records to process for daily chart");
@@ -484,6 +522,9 @@ function processDailyData(records) {
 
 // Process data for time of day chart (hourly buckets)
 function processTimeOfDayData(records) {
+    // Filter out Matt McCrary's shots
+    records = filterRecords(records);
+
     // Handle empty records
     if (!records || records.length === 0) {
         console.log("No records to process for time of day");
