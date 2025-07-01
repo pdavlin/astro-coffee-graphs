@@ -9,8 +9,11 @@
     "astro": "astro"
   },
   "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "airtable": "^0.12.2",
     "astro": "^5.5.3",
-    "chart.js": "^4.4.8"
+    "chart.js": "^4.4.8",
+    "satori": "^0.15.2",
+    "satori-html": "^0.3.2"
   }
 }
